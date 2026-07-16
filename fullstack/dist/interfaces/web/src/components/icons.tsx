@@ -1,0 +1,76 @@
+import {
+  IconPlane,
+  IconBed,
+  IconMapPin,
+  IconCar,
+  IconMicrophone,
+  IconLoader2,
+  IconCheck,
+  IconX,
+  IconPhone,
+  IconChevronDown,
+  IconArrowUp,
+  IconMoon,
+  IconSun,
+  IconPlus,
+  IconAlertTriangle,
+  IconInfoCircle,
+  IconCircleCheck,
+  IconClockHour4,
+  IconMenu2,
+  IconUsers,
+  IconLink,
+  IconMessage2,
+  IconMail,
+  IconDots,
+  IconTrash,
+  IconUserCheck,
+  IconUserPlus,
+  IconHourglassLow,
+} from '@tabler/icons-react';
+import type { NodeKind } from '../lib/types';
+
+export function KindIcon({ kind, size = 18, stroke = 1.5 }: { kind: NodeKind; size?: number; stroke?: number }) {
+  const p = { size, stroke };
+  switch (kind) {
+    case 'flight':
+      return <IconPlane {...p} />;
+    case 'hotel':
+      return <IconBed {...p} />;
+    case 'activity':
+      return <IconMapPin {...p} />;
+    default:
+      return <IconCar {...p} />;
+  }
+}
+
+export {
+  IconMicrophone,
+  IconLoader2,
+  IconCheck,
+  IconX,
+  IconPhone,
+  IconChevronDown,
+  IconArrowUp,
+  IconMoon,
+  IconSun,
+  IconPlus,
+  IconAlertTriangle,
+  IconInfoCircle,
+  IconCircleCheck,
+  IconClockHour4,
+  IconMenu2,
+  IconPlane,
+  IconBed,
+  IconMapPin,
+  IconCar,
+  IconUsers,
+  IconLink,
+  IconMessage2,
+  IconMail,
+  IconDots,
+  IconTrash,
+  IconUserCheck,
+  IconUserPlus,
+  IconHourglassLow,
+};

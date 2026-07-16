@@ -1,0 +1,31 @@
+{
+  "pitch": "src/roadmap/pitch.html",
+  "lanes": [
+    {
+      "name": "The Living Itinerary",
+      "narrative": "Deepen the core promise. Start by letting Waypoint read your inbox instead of your typing, end with it architecting real multi-city trips and speaking up before you even ask.",
+      "items": ["ticket-import.md", "price-watch.md", "day-of-concierge.md", "multi-city-architect.md"]
+    },
+    {
+      "name": "Waypoint Calls",
+      "narrative": "Take the flagship disruption call and grow it into a full calling relationship — first reaching the traveler directly, then making the call itself real, then making it available for anything, not just emergencies.",
+      "items": ["proactive-traveler-calls.md", "real-outbound-calling.md", "call-anything.md"]
+    },
+    {
+      "name": "Travel Together",
+      "narrative": "Break the single-traveler wall on purpose. Start by putting companions on the same live board, then settle up the money between them, and end with a standing memory of every trip and every person you've traveled with.",
+      "items": ["shared-trips.md", "split-the-bill.md", "travel-circle.md"]
+    },
+    {
+      "name": "Waypoint in Your Pocket",
+      "narrative": "Take voice-first to its conclusion beyond the browser. Start with your wallet and a phone number, end with a phone call that is the whole product, no screen required.",
+      "items": ["wallet-and-calendar.md", "sms-companion.md", "call-waypoint-directly.md"]
+    },
+    {
+      "name": "The Trip, Understood",
+      "narrative": "Turn the event log Waypoint already keeps into something that looks back and looks forward — a story worth sharing, and a ranker that gets sharper every trip.",
+      "items": ["trip-recap.md", "learned-preferences.md"]
+    }
+  ],
+  "standalone": []
+}

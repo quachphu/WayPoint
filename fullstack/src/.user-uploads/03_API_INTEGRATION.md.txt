@@ -1,0 +1,146 @@
+# API integration reference
+Concrete details pulled from each provider's own developer documentation, not generic descriptions. Confirm exact values against the live docs at build time (endpoints and required fields do shift between versions), but the shapes and flows below are correct as of this writing and are enough for a coding agent to write real integration code against, not guesses.
+## 1. Sabre APIs
+### 1.1 Getting access
+Register for a free Sabre Dev Studio account to get **certification-environment** (test) credentials, immediately self-serve, this is the right environment for the entire core release. Production access requires a signed account-manager relationship and real business vetting, not a quick process, don't confuse the two environments or plan around production access being available on short notice. Since this project originated at a Sabre-sponsored hackathon, it's worth checking whether any pre-issued sandbox credentials from that event are still valid and worth reusing before self-registering from scratch.
+### 1.2 Authentication
+OAuth2 password-grant token, obtained once and cached (sessionless tokens last 7 days and are the right choice here, session tokens time out after 15 minutes of inactivity and cap at 50 concurrent sessions per customer, unnecessary complexity for this use case).
+```bash
+curl --request POST \
+  --header "Content-Type: application/x-www-form-urlencoded" \
+  --header "Authorization: Basic BASE64(client_id:client_secret)" \
+  --data "grant_type=password&username=YOUR_EPR_ID-GROUP-DOMAIN&password=YOUR_PASSWORD" \
+  https://api.platform.sabre.com/v3/auth/token
+```
+Response: `{"access_token": "...", "token_type": "bearer", "expires_in": 604800}`. Cache the token server-side (Redis, keyed by environment) and refresh proactively before expiry, never re-authenticate per request.
+**Certification vs production base URLs differ** (cert is typically an `api-crt` / `api.test` prefixed host, production is `api.platform.sabre.com` — confirm the exact cert hostname issued with your Dev Studio credentials, it's included in the account setup email, not hardcoded here since it's account-specific).
+### 1.3 Flight search — Bargain Finder Max (BFM)
+`POST /v5/offers/shop` (Air Search Suite → Bargain Finder Max). This is the workhorse for the planning conversation and for re-shopping during a disruption.
+```json
+{
+  "OTA_AirLowFareSearchRQ": {
+    "Version": "5",
+    "POS": { "Source": [{ "PseudoCityCode": "YOUR_PCC", "RequestorID": { "Type": "1", "ID": "1", "CompanyName": { "Code": "TN" } } }] },
+    "OriginDestinationInformation": [
+      { "DepartureDateTime": "2026-07-18T08:00:00", "OriginLocation": { "LocationCode": "LAX" }, "DestinationLocation": { "LocationCode": "SFO" } }
+    ],
+    "TravelPreferences": { "MaxStopsQuantity": 1 },
+    "TravelerInfoSummary": { "AirTravelerAvail": [{ "PassengerTypeQuantity": [{ "Code": "ADT", "Quantity": 1 }] }] },
+    "TPA_Extensions": { "IntelliSellTransaction": { "RequestType": { "Name": "50ITINS" } } }
+  }
+}
+```
+Returns up to 50 itineraries (per `RequestType.Name`) ranked by price by default, each with an `offerId` and a time-to-live. **Always revalidate the chosen offer immediately before booking** (a dedicated revalidation call), offers expire and re-pricing on stale data is the single most common source of booking failures in Sabre integrations, this is not optional error handling, it's a required step in the flow. Sabre's official Node.js sample app (`SabreDevStudio/bargain-finder-max-sample-nodejs` on GitHub) is a working, minimal reference for the full auth-to-parsed-results flow, point the coding agent at it directly if the JSON shape needs clarifying.
+### 1.4 Hotel search — Content Services for Lodging
+`POST` to the Get Hotel Availability endpoint (`GetHotelAvail` / `v2`) for a geo or property search with rate plans. Official sample: `SabreDevStudio/get-hotel-avail-v2-sample-nodejs`. Request needs a stay date range, guest counts, and either a location or explicit hotel codes; response normalizes multi-source rate data (Sabre's own "normalization" layer) into one consistent structure regardless of the underlying supplier, which is genuinely useful, don't write custom per-supplier parsing.
+### 1.5 Retrieving and modifying an existing booking (the disruption flow's first step)
+Booking Management API, `POST /v1/trip/orders/getBooking` (or equivalent path for your API version), by confirmation ID:
+```json
+{ "confirmationId": "ABC123", "returnOnly": ["FLIGHTS"] }
+```
+This is exactly what the disruption agent calls first: given the trip's stored PNR, pull the current, authoritative state of the booking before deciding what to re-shop for. Servicing (changes, cancellations) goes through the same product family; expect to need a change-specific endpoint beyond simple retrieval, check the Booking Management API reference for the exact servicing operation your cert account has enabled.
+### 1.6 Agentic APIs and MCP server
+Sabre has published an **MCP server** alongside "agentic-ready" REST APIs specifically so LLM agents can discover and call these tools without hand-written per-endpoint integration code, per Sabre's own description it acts as the orchestrator: agents discover available tools dynamically, understand how to structure requests, and parse responses, without the developer wiring each API by hand. Confirm whether it's available on your Dev Studio account before writing any raw REST client for BFM, hotel search, or booking management, wiring the orchestrator's tool layer directly to the MCP server is very likely less code and more reliable than hand-rolled HTTP clients for the same endpoints, this is worth checking first, not after building the REST clients.
+### 1.7 Rate/scale notes for the sandbox
+Cert environment credentials are meant for development traffic, not load testing, don't script rapid repeated calls against it. Cache aggressively (a search result doesn't need to be re-fetched if the user asks a clarifying question about it) and only call BFM/hotel-avail when the search parameters actually change.
+## 2. Vocal Bridge
+### 2.1 Getting access and the CLI
+```bash
+pip install vocal-bridge   # requires Python 3.9+
+vb auth login              # or: export VOCAL_BRIDGE_API_KEY=vb_...
+vb agent use                # select which agent this session acts as
+```
+Two key types: **Agent API keys** (scoped to one agent, get from the agent's detail page) and **Account API keys** (work across all agents on the account, must include an `X-Agent-Id` header on direct API calls). Agent-scoped keys per developer's local environment is the simplest setup for day-to-day work.
+Vocal Bridge also ships a **Claude Code plugin** with native slash commands for managing the agent, streaming debug events, and updating configs without leaving the coding session:
+```
+/plugin marketplace add vocalbridgeai/vocal-bridge-marketplace
+/plugin install vocal-bridge@vocal-bridge
+```
+If the coding agent building this is Claude Code, install this early, it removes most of the friction of switching to a terminal to poke at the Vocal Bridge dashboard mid-build.
+### 2.2 Backend token issuance (keep the API key server-side)
+The frontend never holds the Vocal Bridge API key. The backend proxies a single call to mint a short-lived connection token per session:
+```bash
+curl -X POST "https://vocalbridgeai.com/api/v1/token" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"participant_name": "User"}'
+```
+The client then connects with that token, not the API key. This is the entire gateway responsibility described in `docs/02_ARCHITECTURE.md` §2, don't build more than this.
+### 2.3 Client SDK — embedded voice with live UI updates
+```javascript
+import { VocalBridgeProvider, useVocalBridge, useTranscript } from '@vocalbridgeai/react';
+function App() {
+  return (
+    <VocalBridgeProvider auth={{ tokenUrl: '/api/voice-token' }} participantName="User">
+      <VoiceUI />
+    </VocalBridgeProvider>
+  );
+}
+function VoiceUI() {
+  const { state, connect, disconnect } = useVocalBridge();
+  const { transcript } = useTranscript();
+  // subscribe to agentAction events for the live itinerary graph, see 02_ARCHITECTURE.md §6
+  return ( /* mic button + live transcript + itinerary view */ );
+}
+```
+### 2.4 Client Actions — the bidirectional channel the planning board runs on
+Confirmed directly from Vocal Bridge's developer docs: Client Actions run **both directions** on the same data channel that carries the transcript, agent-to-app and app-to-agent, each action configured with a name, description, and direction (`vb config set --client-actions-file actions.json`, or via the dashboard).
+**Agent → app** (the backend drives the UI, this is what makes the planning board build live):
+```javascript
+vb.on('agentAction', ({ action, payload }) => {
+  if (action === 'board_update') {
+    applyGraphDiff(payload);
+  }
+});
+```
+**App → agent** (the UI tells the agent what the user just did, this is what makes clicking a board node feel like part of the same conversation rather than a separate UI event, see `docs/07_PLANNING_BOARD.md` §7 for the full board-specific wiring):
+```javascript
+await vb.sendAction('board_node_selected', { node_id: node.id });
+// the agent now has this in its context for the next turn
+```
+React hook equivalents (`useAgentActions`, and `sendAction` from `useVocalBridge`) are available via `@vocalbridgeai/react` for either direction, idiomatic for a React frontend rather than reaching for the raw SDK.
+### 2.5 Layering voice onto the existing orchestrator (the "two lines" pattern)
+This is how the voice runtime hands off to the LangGraph orchestrator, don't reimplement the agent logic twice for voice vs chat, this callback is the single entry point both surfaces use:
+```javascript
+vb.onAIAgentQuery(async (query) => {
+  const answer = await orchestrator.invoke(query, { thread_id: tripId });
+  return answer; // spoken back to the user automatically
+});
+```
+### 2.6 Outbound calling — the disruption agent's core tool
+Requires an active Pilot-tier subscription and outbound calling explicitly enabled with ToS acceptance (do this as part of initial setup, not mid-feature-build):
+```bash
+vb config set --outbound-enabled true --accept-outbound-tos
+vb config set --outbound-greeting "Hi, this is an AI assistant calling on behalf of a traveler regarding their booking."
+```
+Programmatic call (numbers in E.164 format, e.g. `+14155551234`):
+```bash
+vb call +14155551234 --name "Airline Support" --json
+```
+**Hard limits to design around, not just be aware of**: 50 calls/day per agent, 200 calls/day per user. Build the testing/staging flow (`docs/06_BUILD_PLAN.md`, closing notes) so automated tests and manual QA don't burn through this quota chasing the same bug repeatedly. **Compliance is not optional and Vocal Bridge's own terms make the developer solely responsible for it** (their ToS explicitly disclaims liability and requires certifying consent was obtained) — read `docs/04_SECURITY_COMPLIANCE.md` before wiring this up, the outbound greeting shown above is the minimum viable AI disclosure, not decoration.
+Stream the call transcript live (feeds the live call panel and the board's inline transcript, `docs/07_PLANNING_BOARD.md` §6):
+```bash
+vb debug   # WebSocket, real-time
+```
+### 2.7 Listener mode (not core, but worth knowing exists)
+A Vocal Bridge agent configured with `--style Listener` never speaks, it silently analyzes an ongoing conversation and emits structured events (`coaching_suggestion`, `speaker_map_update`). Not needed for the core release's flows, but if a later phase wants the agent to "sit in" on a call between two humans (e.g. two trip members debating an option) without speaking, this is the primitive for it.
+## 3. AgentPhone (optional, for testing the outbound-call flow)
+Y Combinator-backed (P26 batch) telephony infrastructure, gives an agent its own phone number provisioned in one API call, unified webhook for both voice and messages, real-time call transcription, MCP server support. Not required for prize eligibility, Vocal Bridge alone satisfies the outbound-calling requirement. Where this earns its place: standing up a controllable *receiving* end (playing "the airline") for development, testing, and any live walkthrough, without needing a second full Vocal Bridge integration or ever pointing a real call at an actual airline support line. See `docs/06_BUILD_PLAN.md`'s closing notes for exactly how this fits into testing the disruption flow. If used, treat its number the same as any other: disclose AI involvement on answer, same as §2.6.
+## 4. Google Maps Platform
+Standard, stable APIs, no special access process:
+- **Places API** for attraction/restaurant discovery and details
+- **Directions/Routes API** for pairwise travel times, feeds the route-ordering algorithm in `docs/02_ARCHITECTURE.md` §3.3
+Both are well-documented and shouldn't need special research at build time, budget minimal time here relative to Sabre and Vocal Bridge.
+## 5. Environment variables checklist
+```
+SABRE_CLIENT_ID=
+SABRE_CLIENT_SECRET=
+SABRE_PCC=                 # pseudo city code from your Dev Studio account
+SABRE_ENV=cert             # cert | prod
+VOCAL_BRIDGE_API_KEY=
+VOCAL_BRIDGE_AGENT_ID=     # only if using an account-level key
+GOOGLE_MAPS_API_KEY=
+AGENTPHONE_API_KEY=        # optional, mock-airline side only
+DATABASE_URL=              # Postgres, also used for LangGraph checkpointing
+```
+Never commit these. Use the deployment platform's secret manager (Railway/Render/Fly all have one built in) from the start, not "for later."

@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waypoint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --nocturne: #0b0b0a;
+  --mist: #f6f5f4;
+  --ink: #1b1a17;
+  --heading: #0b63e5;
+  --heading-lt: #4c97ff;
+  --beacon: #ec652b;
+  --beacon-lt: #fb7a40;
+  --success: #34c759;
+  --bg-dark: #0b0b0a;
+  --bg-light: #f6f5f4;
+}
+
+html, body {
+  height: 100svh;
+  overflow: hidden;
+  background: var(--bg-dark);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  color: var(--mist);
+  -webkit-font-smoothing: antialiased;
+}
+
+.deck { display: flex; width: max-content; height: 100svh; }
+
+.slide {
+  flex: 0 0 100vw;
+  width: 100vw;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 56px;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+@media (max-width: 820px) { .slide { padding: 40px 26px; } }
+
+.slide-dark { background: var(--nocturne); --pri: #f6f5f4; --sec: rgba(246,245,244,0.60); --ter: rgba(246,245,244,0.38); color: var(--pri); }
+.slide-light { background: var(--mist); --pri: #1b1a17; --sec: #57564f; --ter: #9a968d; color: var(--pri); }
+
+.slide-dark::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image: radial-gradient(rgba(255,255,255,0.045) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+.glow-b::after, .glow-h::after {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+}
+.glow-b::after { background: radial-gradient(60% 55% at 50% 42%, rgba(236,101,43,0.16), transparent 70%); }
+.glow-h::after { background: radial-gradient(60% 55% at 50% 45%, rgba(11,99,229,0.16), transparent 70%); }
+
+/* ---------- Typography ---------- */
+.display { font-family: "Bricolage Grotesque", system-ui, sans-serif; font-weight: 600; letter-spacing: -0.03em; line-height: 1.02; }
+.h-xl { font-size: clamp(46px, 8.5vw, 118px); }
+.h-lg { font-size: clamp(38px, 6vw, 78px); }
+.h-md { font-size: clamp(28px, 4.2vw, 52px); }
+.eyebrow { font-size: clamp(11px, 1.35vw, 13px); font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ter); }
+.eb-beacon { color: var(--beacon-lt); }
+.eb-heading { color: var(--heading-lt); }
+.eb-light { color: #97938c; }
+.lead { font-size: clamp(16px, 2.05vw, 21px); line-height: 1.5; color: var(--sec); max-width: 640px; font-weight: 400; }
+.punch { font-size: clamp(18px, 2.5vw, 29px); line-height: 1.28; color: var(--pri); max-width: 780px; font-weight: 500; letter-spacing: -0.01em; }
+.c-beacon { color: var(--beacon-lt); }
+.c-heading { color: var(--heading-lt); }
+.strong { font-weight: 600; color: var(--pri); }
+
+/* ---------- Layout ---------- */
+.wrap { position: relative; z-index: 1; width: min(1080px, 92vw); margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+.wrap.center { align-items: center; text-align: center; }
+.wrap.left { margin: 0; margin-left: max(48px, 7vw); align-items: flex-start; text-align: left; max-width: 600px; }
+.split { position: relative; z-index: 1; display: grid; grid-template-columns: 1.02fr 0.98fr; gap: 60px; align-items: center; width: min(1140px, 92vw); }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; gap: 32px; } }
+.stack { display: flex; flex-direction: column; gap: 20px; }
+
+/* ---------- Voice orb ---------- */
+.orb { position: relative; display: inline-flex; align-items: center; justify-content: center; width: var(--o, 64px); height: var(--o, 64px); flex: none; }
+.orb .ring { position: absolute; inset: 0; border-radius: 50%; background: var(--beacon-lt); opacity: 0; animation: ringPulse 2.6s ease-out infinite; }
+.orb .ring:nth-child(2) { animation-delay: 1.3s; }
+.orb .core { position: relative; width: 42%; height: 42%; border-radius: 50%; background: var(--beacon-lt); box-shadow: 0 0 26px rgba(251,122,64,0.55); animation: breathe 2.6s ease-in-out infinite; z-index: 2; }
+@keyframes ringPulse { 0% { transform: scale(0.65); opacity: 0.45; } 100% { transform: scale(2.05); opacity: 0; } }
+@keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+@keyframes dotPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
+
+/* ---------- Utterances ---------- */
+.utters { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.utter { display: inline-flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.11); border-radius: 999px; padding: 13px 22px; font-size: clamp(15px, 2vw, 20px); color: #f6f5f4; letter-spacing: -0.01em; }
+.utter svg { width: 16px; height: 16px; color: var(--beacon-lt); flex: none; }
+
+/* ---------- Board ---------- */
+.board { display: flex; align-items: center; justify-content: center; flex-wrap: nowrap; }
+.node-card { position: relative; background: #fff; border: 1px solid rgba(27,26,23,0.09); border-radius: 12px; padding: 13px 15px 13px 20px; min-width: 172px; text-align: left; box-shadow: 0 2px 6px rgba(0,0,0,0.24), 0 16px 40px rgba(0,0,0,0.32); }
+.node-card .bar { position: absolute; left: 8px; top: 12px; bottom: 12px; width: 3px; border-radius: 2px; }
+.bar.confirmed { background: var(--heading); }
+.bar.proposed { background: #a8a49a; }
+.bar.working { background: var(--beacon); }
+.nc-top { display: flex; align-items: center; gap: 8px; }
+.nc-ico { width: 18px; height: 18px; color: #6b6a63; flex: none; }
+.nc-title { font-size: 15px; font-weight: 500; color: #1b1a17; letter-spacing: -0.01em; }
+.nc-meta { font-size: 12.5px; color: #6b6a63; margin-top: 4px; }
+.edge { position: relative; display: flex; align-items: center; justify-content: center; }
+.edge-line { width: 54px; height: 2px; background: rgba(255,255,255,0.20); }
+.edge-label { position: absolute; font-size: 11px; color: rgba(246,245,244,0.72); background: #151513; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
+@media (max-width: 820px) {
+  .board { flex-direction: column; }
+  .edge-line { width: 2px; height: 30px; }
+}
+
+/* ---------- Call panel ---------- */
+.callp { width: min(460px, 92vw); background: #fff; border-radius: 16px; border: 1px solid rgba(0,0,0,0.06); box-shadow: 0 24px 70px rgba(0,0,0,0.5); overflow: hidden; text-align: left; }
+.callp-head { padding: 15px 18px; border-bottom: 1px solid rgba(27,26,23,0.08); display: flex; align-items: center; gap: 11px; }
+.livedot { width: 9px; height: 9px; border-radius: 50%; background: var(--beacon); animation: dotPulse 2.4s ease-in-out infinite; flex: none; }
+.callp-head .meta { flex: 1; min-width: 0; }
+.callp-status { font-size: 14px; font-weight: 500; color: #1b1a17; }
+.callp-subline { font-size: 12px; color: #6b6a63; margin-top: 1px; }
+.callp-timer { font-size: 13px; color: #6b6a63; font-variant-numeric: tabular-nums; }
+.callp-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 11px; }
+.line { display: flex; flex-direction: column; max-width: 90%; }
+.line .who { font-size: 10.5px; color: #9a968d; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 4px; }
+.line .txt { font-size: 13.5px; line-height: 1.4; color: #1b1a17; padding: 8px 12px; border-radius: 12px; }
+.line.wp { align-self: flex-start; align-items: flex-start; }
+.line.wp .txt { background: #fef1ea; }
+.line.them { align-self: flex-end; align-items: flex-end; }
+.line.them .txt { background: #f1f0 ee; background: #f1f0ee; }
+.line.out { align-self: stretch; max-width: 100%; flex-direction: row; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(52,199,89,0.1); border-radius: 10px; margin-top: 2px; }
+.line.out svg { width: 15px; height: 15px; color: #2ba24a; flex: none; }
+.line.out span { font-size: 13px; font-weight: 500; color: #217a38; letter-spacing: -0.01em; }
+
+/* ---------- Confirm gate ---------- */
+.gate { width: min(380px, 92vw); background: #fff; border: 1px solid rgba(27,26,23,0.08); border-radius: 18px; padding: 24px; box-shadow: 0 12px 32px rgba(0,0,0,0.28), 0 40px 80px rgba(0,0,0,0.4); text-align: left; }
+.gate-eyebrow { font-size: 12.5px; font-weight: 500; color: #6b6a63; margin-bottom: 12px; }
+.gate-head { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; }
+.gate-tile { width: 40px; height: 40px; border-radius: 10px; background: #edebe8; display: flex; align-items: center; justify-content: center; flex: none; }
+.gate-tile svg { width: 20px; height: 20px; color: #57564f; }
+.gate-action { font-size: 20px; font-weight: 500; letter-spacing: -0.01em; color: #1b1a17; line-height: 1.18; }
+.gate-sum { background: #f6f5f4; border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 11px; }
+.gate-li { display: flex; justify-content: space-between; font-size: 13.5px; color: #6b6a63; }
+.gate-li b { color: #1b1a17; font-weight: 500; }
+.gate-li.total b { font-size: 16px; }
+.gate-charge { font-size: 13px; color: #6b6a63; margin: 15px 0 18px; line-height: 1.45; }
+.gate-btns { display: flex; gap: 12px; }
+.gate-btn { flex: 1; height: 46px; border-radius: 9px; font-size: 16px; font-weight: 500; border: 1px solid transparent; cursor: pointer; font-family: inherit; }
+.gate-decline { background: #f6f5f4; border-color: rgba(27,26,23,0.1); color: #1b1a17; }
+.gate-book { background: var(--heading); color: #fff; }
+
+/* ---------- Brain diagram ---------- */
+.brain { display: flex; align-items: center; justify-content: center; gap: 0; flex-wrap: nowrap; }
+.brain-inputs { display: flex; flex-direction: column; gap: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 9px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; padding: 11px 17px; font-size: 15px; color: #f6f5f4; letter-spacing: -0.01em; white-space: nowrap; }
+.chip svg { width: 16px; height: 16px; flex: none; }
+.chip .mic { color: var(--beacon-lt); }
+.chip .cht { color: var(--heading-lt); }
+.brain-line { width: 46px; height: 2px; background: rgba(255,255,255,0.2); flex: none; }
+.brain-core { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.brain-core .label { font-family: "Bricolage Grotesque", system-ui, sans-serif; font-weight: 600; font-size: 17px; letter-spacing: -0.02em; }
+.brain-node { display: inline-flex; align-items: center; gap: 9px; background: #fff; border: 1px solid rgba(27,26,23,0.09); border-radius: 11px; padding: 11px 15px; box-shadow: 0 12px 30px rgba(0,0,0,0.3); }
+.brain-node svg { width: 17px; height: 17px; color: var(--heading); flex: none; }
+.brain-node span { font-size: 14px; font-weight: 500; color: #1b1a17; }
+@media (max-width: 760px) {
+  .brain { flex-direction: column; }
+  .brain-inputs { flex-direction: row; }
+  .brain-line { width: 2px; height: 26px; }
+}
+
+/* ---------- Future points ---------- */
+.points { list-style: none; display: flex; flex-direction: column; gap: 18px; max-width: 660px; }
+.point { display: flex; gap: 14px; align-items: flex-start; }
+.point .pdot { width: 9px; height: 9px; border-radius: 50%; background: var(--heading-lt); margin-top: 9px; flex: none; }
+.point .pdot.beacon { background: var(--beacon-lt); }
+.point span.ptx { font-size: clamp(15px, 2vw, 21px); line-height: 1.45; color: var(--sec); }
+.point span.ptx b { color: var(--pri); font-weight: 500; }
+.ghost-num { position: absolute; z-index: 0; right: 4vw; bottom: -4vh; font-family: "Bricolage Grotesque", system-ui, sans-serif; font-weight: 700; font-size: clamp(220px, 42vw, 560px); line-height: 1; color: rgba(255,255,255,0.035); pointer-events: none; letter-spacing: -0.04em; }
+
+/* ---------- Problem cluster ---------- */
+.cluster { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.win { position: absolute; width: 220px; height: 146px; background: #fff; border: 1px solid rgba(0,0,0,0.07); border-radius: 11px; box-shadow: 0 16px 40px rgba(0,0,0,0.08); }
+.win-bar { height: 27px; border-bottom: 1px solid rgba(0,0,0,0.06); display: flex; align-items: center; gap: 6px; padding: 0 12px; }
+.win-dot { width: 8px; height: 8px; border-radius: 50%; background: #d9d7d3; }
+.win-dot.red { background: #ff5a48; }
+.win-body { padding: 14px; display: flex; flex-direction: column; gap: 9px; }
+.win-line { height: 8px; border-radius: 4px; background: #eceae7; }
+.w1 { top: 13%; right: 7%; transform: rotate(-6deg); }
+.w2 { top: 40%; right: 22%; transform: rotate(4deg); }
+.w3 { top: 55%; right: 5%; transform: rotate(-3deg); }
+.w4 { top: 22%; right: 33%; transform: rotate(8deg); opacity: 0.9; }
+@media (max-width: 900px) { .cluster { opacity: 0.14; } }
+
+.credits { font-size: 12px; color: var(--ter); letter-spacing: 0.01em; }
+
+/* ---------- Progress ---------- */
+.progress { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 4px; padding: 12px 16px; z-index: 100; }
+.progress-seg { flex: 1; height: 4px; border-radius: 3px; background: rgba(255,255,255,0.13); overflow: hidden; transition: background 0.3s; }
+.progress-seg .fill { height: 100%; width: 0%; background: rgba(255,255,255,0.7); border-radius: 3px; transition: width 0.5s ease; }
+.progress-seg.done .fill { width: 100%; }
+.progress-seg.active .fill { width: 100%; }
+.progress.light .progress-seg { background: rgba(0,0,0,0.09); }
+.progress.light .progress-seg .fill { background: rgba(0,0,0,0.45); }
+
+/* ---------- Tap zones + chevrons ---------- */
+.tap-zones { position: fixed; inset: 0; display: flex; z-index: 50; }
+.tap-zone { height: 100%; -webkit-tap-highlight-color: transparent; }
+.tap-prev { width: 33.333%; }
+.tap-next { width: 66.667%; }
+.chevron { position: fixed; top: 50%; transform: translateY(-50%); z-index: 100; width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,0.1); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s, transform 0.2s, opacity 0.3s; }
+.chevron:hover { background: rgba(255,255,255,0.22); transform: translateY(-50%) scale(1.06); }
+.chevron:active { transform: translateY(-50%) scale(0.96); }
+.chevron svg { width: 22px; height: 22px; stroke: rgba(255,255,255,0.9); stroke-width: 2; fill: none; }
+.chevron-prev { left: 16px; }
+.chevron-next { right: 16px; }
+.chevron.hidden { opacity: 0; pointer-events: none; }
+.chevron.light { background: rgba(0,0,0,0.07); }
+.chevron.light:hover { background: rgba(0,0,0,0.14); }
+.chevron.light svg { stroke: rgba(0,0,0,0.55); }
+@media (max-width: 768px) {
+  .chevron { width: 36px; height: 36px; }
+  .chevron svg { width: 18px; height: 18px; }
+  .chevron-prev { left: 8px; }
+  .chevron-next { right: 8px; }
+}
+
+[data-reveal] { opacity: 0; }
+.anim-hidden { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  [data-reveal], .anim-hidden { opacity: 1 !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+
+<div class="deck" id="deck">
+
+  <!-- 0 · TITLE -->
+  <div class="slide slide-dark glow-b" data-index="0">
+    <div class="wrap center" style="gap:28px;">
+      <div class="orb" style="--o:96px;" data-reveal><span class="ring"></span><span class="ring"></span><span class="core"></span></div>
+      <span class="eyebrow eb-beacon" data-reveal>Voice-first AI travel companion</span>
+      <h1 class="display h-xl" data-reveal>Waypoint</h1>
+      <p class="punch" data-reveal style="max-width:640px;">Say where you're headed. Waypoint handles the rest.</p>
+      <p class="credits" data-reveal>Built at the DeepLearning.AI Voice AI Hackathon · Sabre inventory · Vocal Bridge voice</p>
+    </div>
+  </div>
+
+  <!-- 1 · PROBLEM -->
+  <div class="slide slide-light" data-index="1">
+    <div class="cluster" aria-hidden="true">
+      <div class="win w1"><div class="win-bar"><span class="win-dot red"></span><span class="win-dot"></span><span class="win-dot"></span></div><div class="win-body"><span class="win-line" style="width:82%"></span><span class="win-line" style="width:58%"></span><span class="win-line" style="width:70%"></span></div></div>
+      <div class="win w2"><div class="win-bar"><span class="win-dot"></span><span class="win-dot"></span><span class="win-dot"></span></div><div class="win-body"><span class="win-line" style="width:70%"></span><span class="win-line" style="width:88%"></span><span class="win-line" style="width:52%"></span></div></div>
+      <div class="win w3"><div class="win-bar"><span class="win-dot"></span><span class="win-dot"></span><span class="win-dot"></span></div><div class="win-body"><span class="win-line" style="width:64%"></span><span class="win-line" style="width:76%"></span><span class="win-line" style="width:60%"></span></div></div>
+      <div class="win w4"><div class="win-bar"><span class="win-dot"></span><span class="win-dot"></span><span class="win-dot"></span></div><div class="win-body"><span class="win-line" style="width:80%"></span><span class="win-line" style="width:50%"></span></div></div>
+    </div>
+    <div class="wrap left" style="gap:22px;">
+      <span class="eyebrow eb-light" data-reveal>The problem</span>
+      <h1 class="display h-lg" data-reveal>Trip planning is a wall of tabs.</h1>
+      <p class="lead" data-reveal>Flight sites. Hotel sites. Reviews. A group chat arguing about dates. A spreadsheet nobody updates.</p>
+      <p class="punch" data-reveal>Then a flight breaks three hours before boarding, and every one of them goes quiet. <span class="strong">You're the one on hold.</span></p>
+    </div>
+  </div>
+
+  <!-- 2 · GAP -->
+  <div class="slide slide-dark" data-index="2">
+    <div class="wrap" style="gap:26px;">
+      <span class="eyebrow" data-reveal>The gap</span>
+      <h1 class="display h-lg" data-reveal>Talking is easy.<br><span class="c-beacon">Acting is hard.</span></h1>
+      <p class="lead" data-reveal style="max-width:680px;">Booking a trip and fixing it when it breaks means being trusted to spend money and make a phone call on someone's behalf.</p>
+      <p class="punch" data-reveal>Nobody has cracked that, because the trust problem is real: how do you let an AI act for you without it ever going rogue?</p>
+    </div>
+  </div>
+
+  <!-- 3 · THE TURN -->
+  <div class="slide slide-dark glow-b" data-index="3">
+    <div class="wrap center" style="gap:26px;">
+      <span class="eyebrow eb-beacon" data-reveal>Meet Waypoint</span>
+      <h1 class="display h-xl" data-reveal>Just say it.</h1>
+      <div class="orb" style="--o:64px;" data-reveal><span class="ring"></span><span class="ring"></span><span class="core"></span></div>
+      <div class="utters">
+        <div class="utter" data-reveal><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>"Plan me a weekend in San Francisco."</div>
+        <div class="utter" data-reveal><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>"We just landed. Find us ramen."</div>
+        <div class="utter" data-reveal><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>"My flight got delayed. Figure it out."</div>
+      </div>
+      <p class="punch" data-reveal style="max-width:660px;">Voice is the front door. And Waypoint doesn't just answer. It works, live, in front of you.</p>
+    </div>
+  </div>
+
+  <!-- 4 · THE BOARD -->
+  <div class="slide slide-dark glow-h" data-index="4">
+    <div class="wrap center" style="gap:28px;">
+      <span class="eyebrow eb-heading" data-reveal>The live board</span>
+      <h1 class="display h-lg" data-reveal>Your plan is never a paragraph.</h1>
+      <p class="lead" data-reveal style="max-width:640px;">It builds itself, node by node, while Waypoint talks. Click anything and it opens right there. No page ever changes.</p>
+      <div class="board">
+        <div class="node-card anim-hidden"><span class="bar confirmed"></span>
+          <div class="nc-top"><svg class="nc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l16 -7l-6 16l-3 -6l-7 -3z"/></svg><span class="nc-title">Land at SFO</span></div>
+          <div class="nc-meta">Fri 6:40 PM · UA 1183</div>
+        </div>
+        <div class="edge"><span class="edge-line anim-hidden"></span><span class="edge-label anim-hidden">28 min · BART</span></div>
+        <div class="node-card anim-hidden"><span class="bar confirmed"></span>
+          <div class="nc-top"><svg class="nc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v-4h16v4"/><path d="M4 13V8h7v5"/><path d="M20 13V9a1 1 0 0 0 -1 -1h-9"/><path d="M4 17v2M21 17v2"/></svg><span class="nc-title">Hotel Zephyr</span></div>
+          <div class="nc-meta">2 nights · The Wharf</div>
+        </div>
+        <div class="edge"><span class="edge-line anim-hidden"></span><span class="edge-label anim-hidden">9 min walk</span></div>
+        <div class="node-card anim-hidden"><span class="bar proposed"></span>
+          <div class="nc-top"><svg class="nc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6 -5.686 -6 -10a6 6 0 1 1 12 0c0 4.314 -6 10 -6 10z"/><circle cx="12" cy="11" r="2.2"/></svg><span class="nc-title">Ramen at Marufuku</span></div>
+          <div class="nc-meta">Sat 7:30 PM</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5 · FLAGSHIP -->
+  <div class="slide slide-dark glow-b" data-index="5">
+    <div class="wrap center" style="gap:22px;">
+      <span class="eyebrow eb-beacon" data-reveal>The flagship moment</span>
+      <p class="lead" data-reveal style="max-width:600px;">A flight breaks. Waypoint re-shops alternatives, then dials the airline desk itself.</p>
+      <div class="callp" data-reveal>
+        <div class="callp-head">
+          <span class="livedot"></span>
+          <div class="meta"><div class="callp-status">On the line with United Airlines</div><div class="callp-subline">Rebooking UA 1183</div></div>
+          <span class="callp-timer">0:00</span>
+        </div>
+        <div class="callp-body">
+          <div class="line them js-line"><span class="who">United</span><span class="txt">Rebooking desk, go ahead.</span></div>
+          <div class="line wp js-line"><span class="who">Waypoint</span><span class="txt">UA 1183 is delayed. Get James on your next SFO flight, window seat.</span></div>
+          <div class="line them js-line"><span class="who">United</span><span class="txt">I can hold 448 at 8:10 tonight.</span></div>
+          <div class="line out js-line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5l9 -11"/></svg><span>Hold placed · UA 448 · 8:10 PM</span></div>
+        </div>
+      </div>
+      <p class="display h-md" data-reveal style="margin-top:4px;">Nobody has an API for a phone call.<br><span class="c-beacon">Waypoint just makes one.</span></p>
+    </div>
+  </div>
+
+  <!-- 6 · TRUST -->
+  <div class="slide slide-dark glow-h" data-index="6">
+    <div class="split">
+      <div class="stack">
+        <span class="eyebrow eb-heading" data-reveal>The trust mechanism</span>
+        <h1 class="display h-md" data-reveal>It never spends a dollar without your yes.</h1>
+        <p class="lead" data-reveal>Every booking and every call passes through a hard gate. Not a polite prompt. Actual code that cannot be bypassed, not by the model, not by a call transcript built to trick it.</p>
+        <p class="punch" data-reveal>Waypoint proposes. You decide. Every time.</p>
+      </div>
+      <div style="display:flex;justify-content:center;">
+        <div class="gate anim-hidden">
+          <div class="gate-eyebrow">Confirm booking</div>
+          <div class="gate-head">
+            <span class="gate-tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v-4h16v4"/><path d="M4 13V8h7v5"/><path d="M20 13V9a1 1 0 0 0 -1 -1h-9"/><path d="M4 17v2M21 17v2"/></svg></span>
+            <span class="gate-action">Book Hotel Zephyr, 2 nights</span>
+          </div>
+          <div class="gate-sum">
+            <div class="gate-li"><span>Dates</span><b>Fri – Sun, Mar 14–16</b></div>
+            <div class="gate-li total"><span>Total</span><b>$612.00</b></div>
+          </div>
+          <div class="gate-charge">$612.00 will be charged to Visa ending 4242.</div>
+          <div class="gate-btns"><button class="gate-btn gate-decline">Not yet</button><button class="gate-btn gate-book">Book it</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7 · ONE BRAIN -->
+  <div class="slide slide-dark" data-index="7">
+    <div class="wrap center" style="gap:32px;">
+      <span class="eyebrow" data-reveal>One brain, every channel</span>
+      <h1 class="display h-lg" data-reveal>Talk to it. Type to it.<br>Same conversation.</h1>
+      <div class="brain">
+        <div class="brain-inputs">
+          <span class="chip js-brain"><svg class="mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>Voice</span>
+          <span class="chip js-brain"><svg class="cht" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1 -1 1h-9l-4 3v-3h-3a1 1 0 0 1 -1 -1v-9a1 1 0 0 1 1 -1z"/></svg>Chat</span>
+        </div>
+        <span class="brain-line js-brain"></span>
+        <div class="brain-core js-brain">
+          <div class="orb" style="--o:52px;"><span class="ring"></span><span class="ring"></span><span class="core"></span></div>
+          <span class="label">Waypoint</span>
+        </div>
+        <span class="brain-line js-brain"></span>
+        <div class="brain-node js-brain"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="8" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="12" cy="17" r="2"/><path d="M8 8h8"/><path d="M7.4 9.7l3.2 5.6"/><path d="M16.6 9.7l-3.2 5.6"/></svg><span>Live board</span></div>
+      </div>
+      <p class="punch" data-reveal style="max-width:680px;">Say something out loud, watch it appear in chat. Click a node, the agent already knows what you mean. There's just Waypoint.</p>
+    </div>
+  </div>
+
+  <!-- 8 · FUTURE 01 -->
+  <div class="slide slide-dark glow-b" data-index="8">
+    <div class="ghost-num" aria-hidden="true">01</div>
+    <div class="wrap left" style="gap:26px;">
+      <span class="eyebrow eb-beacon" data-reveal>Where this goes</span>
+      <h1 class="display h-lg" data-reveal>A companion that reaches out.</h1>
+      <ul class="points">
+        <li class="point" data-reveal><span class="pdot"></span><span class="ptx">The morning of your flight, <b>the gate, the weather, and when to leave are already waiting.</b></span></li>
+        <li class="point" data-reveal><span class="pdot"></span><span class="ptx">Fares drop after you book, and <b>Waypoint has already flagged the refund.</b></span></li>
+        <li class="point" data-reveal><span class="pdot beacon"></span><span class="ptx">And soon, when it truly can't wait, <b>Waypoint calls you</b>, the same way it already calls the airline.</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 9 · FUTURE 02 -->
+  <div class="slide slide-dark glow-h" data-index="9">
+    <div class="ghost-num" aria-hidden="true">02</div>
+    <div class="wrap left" style="gap:26px;">
+      <span class="eyebrow eb-heading" data-reveal>Where this goes</span>
+      <h1 class="display h-lg" data-reveal>A companion that remembers your people.</h1>
+      <ul class="points">
+        <li class="point" data-reveal><span class="pdot"></span><span class="ptx">The same live board, <b>shared in real time.</b> Everyone watches the plan build together.</span></li>
+        <li class="point" data-reveal><span class="pdot"></span><span class="ptx">A real memory of your travel circle: <b>who you went with, what you both loved.</b></span></li>
+        <li class="point" data-reveal><span class="pdot"></span><span class="ptx">Next time, Waypoint isn't planning from zero. <b>It picks up where your history left off.</b></span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 10 · FUTURE 03 -->
+  <div class="slide slide-dark glow-b" data-index="10">
+    <div class="ghost-num" aria-hidden="true">03</div>
+    <div class="wrap left" style="gap:26px;">
+      <span class="eyebrow eb-beacon" data-reveal>Where this goes</span>
+      <h1 class="display h-lg" data-reveal>A companion that's everywhere.</h1>
+      <ul class="points">
+        <li class="point" data-reveal><span class="pdot"></span><span class="ptx"><b>Text Waypoint like a friend</b>, from any phone.</span></li>
+        <li class="point" data-reveal><span class="pdot"></span><span class="ptx">Bookings land <b>straight in your wallet</b> the second they're confirmed.</span></li>
+        <li class="point" data-reveal><span class="pdot beacon"></span><span class="ptx">And eventually, dial a number and <b>talk to Waypoint like you'd call anyone.</b> Full trip in your ear, no screen in sight.</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 11 · CLOSING -->
+  <div class="slide slide-dark glow-h" data-index="11">
+    <div class="wrap center" style="gap:28px;">
+      <h1 class="display h-lg" data-reveal>Waypoint doesn't describe your trip. <span class="c-heading">It handles it.</span></h1>
+      <p class="lead" data-reveal style="max-width:660px;">Real inventory. A real voice channel. A trust model strict enough to survive a hostile phone call.</p>
+      <div class="prompt" data-reveal style="display:inline-flex;align-items:center;gap:14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:999px;padding:14px 16px 14px 24px;">
+        <span style="font-size:clamp(16px,2.2vw,22px);color:var(--sec);letter-spacing:-0.01em;">Say where you're headed.</span>
+        <span class="orb" style="--o:40px;"><span class="ring"></span><span class="ring"></span><span class="core"></span></span>
+      </div>
+      <p class="credits" data-reveal>Waypoint · Sabre · Vocal Bridge</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="tap-zones">
+  <div class="tap-zone tap-prev" id="tapPrev"></div>
+  <div class="tap-zone tap-next" id="tapNext"></div>
+</div>
+
+<div class="chevron chevron-prev hidden" id="chevronPrev">
+  <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+</div>
+<div class="chevron chevron-next" id="chevronNext">
+  <svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"></polyline></svg>
+</div>
+
+<script>
+(function() {
+  const deck = document.getElementById('deck');
+  const slides = document.querySelectorAll('.slide');
+  const totalSlides = slides.length;
+  let current = 0;
+  let isAnimating = false;
+
+  const tapPrev = document.getElementById('tapPrev');
+  const tapNext = document.getElementById('tapNext');
+  const progress = document.getElementById('progress');
+  const chevronPrev = document.getElementById('chevronPrev');
+  const chevronNext = document.getElementById('chevronNext');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  for (let i = 0; i < totalSlides; i++) {
+    const seg = document.createElement('div');
+    seg.className = 'progress-seg' + (i === 0 ? ' active' : '');
+    seg.innerHTML = '<div class="fill"></div>';
+    seg.addEventListener('click', () => goTo(i));
+    progress.appendChild(seg);
+  }
+
+  function updateNav() {
+    const segs = progress.querySelectorAll('.progress-seg');
+    segs.forEach((s, i) => {
+      s.classList.toggle('done', i < current);
+      s.classList.toggle('active', i === current);
+    });
+    chevronPrev.classList.toggle('hidden', current === 0);
+    chevronNext.classList.toggle('hidden', current === totalSlides - 1);
+    const s = slides[current];
+    const isLight = s.classList.contains('slide-light');
+    progress.classList.toggle('light', isLight);
+    chevronPrev.classList.toggle('light', isLight);
+    chevronNext.classList.toggle('light', isLight);
+  }
+
+  /* ---- per-slide custom entrances (reveal customization only) ---- */
+  function boardEnter(s) {
+    const nodes = s.querySelectorAll('.node-card');
+    const lines = s.querySelectorAll('.edge-line');
+    const labels = s.querySelectorAll('.edge-label');
+    if (reduceMotion) { gsap.set([...nodes, ...lines, ...labels], { opacity: 1 }); return; }
+    gsap.fromTo(nodes, { opacity: 0, y: 10, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.42, stagger: 0.2, ease: 'power2.out' });
+    gsap.fromTo(lines, { opacity: 0, scaleX: 0 }, { opacity: 1, scaleX: 1, transformOrigin: 'left center', duration: 0.34, stagger: 0.2, delay: 0.2, ease: 'power2.out' });
+    gsap.fromTo(labels, { opacity: 0 }, { opacity: 1, duration: 0.3, stagger: 0.2, delay: 0.36, ease: 'power2.out' });
+  }
+
+  let callTimerStarted = false;
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function callEnter(s) {
+    const lines = s.querySelectorAll('.js-line');
+    const timerEl = s.querySelector('.callp-timer');
+    if (timerEl && !callTimerStarted) {
+      callTimerStarted = true;
+      let t = 4;
+      timerEl.textContent = '0:' + pad(t);
+      setInterval(() => { t++; timerEl.textContent = Math.floor(t / 60) + ':' + pad(t % 60); }, 1000);
+    }
+    if (reduceMotion) { gsap.set(lines, { opacity: 1 }); return; }
+    gsap.fromTo(lines, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, stagger: 0.6, ease: 'power2.out' });
+  }
+
+  function gateEnter(s) {
+    const gate = s.querySelector('.gate');
+    if (reduceMotion) { gsap.set(gate, { opacity: 1 }); return; }
+    gsap.fromTo(gate, { opacity: 0, y: 18, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.55, delay: 0.15, ease: 'power3.out' });
+  }
+
+  function brainEnter(s) {
+    const items = s.querySelectorAll('.js-brain');
+    if (reduceMotion) { gsap.set(items, { opacity: 1 }); return; }
+    gsap.fromTo(items, { opacity: 0, y: 10, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, stagger: 0.13, ease: 'power2.out' });
+  }
+
+  const slideEnter = { 4: boardEnter, 5: callEnter, 6: gateEnter, 7: brainEnter };
+
+  const revealed = new Set();
+  function revealSlide(index) {
+    if (revealed.has(index)) return;
+    revealed.add(index);
+    const els = slides[index].querySelectorAll('[data-reveal]');
+    els.forEach((el, i) => {
+      const delay = (parseFloat(el.dataset.reveal) || 0) + i * 0.05;
+      gsap.fromTo(el, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, delay, ease: 'power2.out' });
+    });
+    if (slideEnter[index]) slideEnter[index](slides[index]);
+  }
+
+  function goTo(index) {
+    if (index === current || isAnimating || index < 0) return;
+    if (index >= totalSlides) {
+      window.parent.postMessage({ type: 'pitch-deck-complete' }, '*');
+      return;
+    }
+    isAnimating = true;
+    current = index;
+    updateNav();
+    gsap.to(deck, {
+      x: -current * window.innerWidth,
+      duration: 0.4,
+      ease: 'power2.inOut',
+      onComplete: () => { revealSlide(current); isAnimating = false; }
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); goTo(current + 1); }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); goTo(current - 1); }
+  });
+
+  tapPrev.addEventListener('click', () => goTo(current - 1));
+  tapNext.addEventListener('click', () => goTo(current + 1));
+  chevronPrev.addEventListener('click', (e) => { e.stopPropagation(); goTo(current - 1); });
+  chevronNext.addEventListener('click', (e) => { e.stopPropagation(); goTo(current + 1); });
+
+  let touchStartX = 0, touchStartY = 0, touchLocked = false;
+  document.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchLocked = false;
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (touchLocked) return;
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return;
+    if (dx < 0) goTo(current + 1);
+    else goTo(current - 1);
+  }, { passive: true });
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => gsap.set(deck, { x: -current * window.innerWidth }), 100);
+  });
+
+  gsap.set(deck, { x: 0 });
+  updateNav();
+  revealSlide(0);
+})();
+</script>
+
+</body>
+</html>

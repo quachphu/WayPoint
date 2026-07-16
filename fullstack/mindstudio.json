@@ -1,0 +1,190 @@
+{
+  "appId": "410e49e7-0d5f-4a1d-af60-f441c5f21f36",
+  "name": "Waypoint",
+  "description": "A voice-first AI travel companion that plans, books, and handles disruptions on a live trip board.",
+  "auth": {
+    "enabled": true,
+    "methods": [
+      "email-code"
+    ],
+    "table": {
+      "name": "users",
+      "columns": {
+        "email": "email",
+        "roles": "roles"
+      }
+    }
+  },
+  "roles": [],
+  "tables": [
+    {
+      "name": "users",
+      "path": "dist/methods/src/tables/users.ts",
+      "export": "Users"
+    },
+    {
+      "name": "trips",
+      "path": "dist/methods/src/tables/trips.ts",
+      "export": "Trips"
+    },
+    {
+      "name": "trip_events",
+      "path": "dist/methods/src/tables/tripEvents.ts",
+      "export": "TripEvents"
+    },
+    {
+      "name": "pending_actions",
+      "path": "dist/methods/src/tables/pendingActions.ts",
+      "export": "PendingActions"
+    },
+    {
+      "name": "messages",
+      "path": "dist/methods/src/tables/messages.ts",
+      "export": "Messages"
+    },
+    {
+      "name": "call_sessions",
+      "path": "dist/methods/src/tables/callSessions.ts",
+      "export": "CallSessions"
+    },
+    {
+      "name": "trip_collaborators",
+      "path": "dist/methods/src/tables/tripCollaborators.ts",
+      "export": "TripCollaborators"
+    }
+  ],
+  "methods": [
+    {
+      "id": "get-bootstrap",
+      "name": "Get Bootstrap",
+      "path": "dist/methods/src/getBootstrap.ts",
+      "export": "getBootstrap"
+    },
+    {
+      "id": "list-trips",
+      "name": "List Trips",
+      "path": "dist/methods/src/listTrips.ts",
+      "export": "listTrips"
+    },
+    {
+      "id": "get-trip",
+      "name": "Get Trip",
+      "path": "dist/methods/src/getTrip.ts",
+      "export": "getTrip"
+    },
+    {
+      "id": "create-trip",
+      "name": "Create Trip",
+      "path": "dist/methods/src/createTrip.ts",
+      "export": "createTrip"
+    },
+    {
+      "id": "update-profile",
+      "name": "Update Profile",
+      "path": "dist/methods/src/updateProfile.ts",
+      "export": "updateProfile"
+    },
+    {
+      "id": "converse",
+      "name": "Converse",
+      "path": "dist/methods/src/converse.ts",
+      "export": "converse"
+    },
+    {
+      "id": "approve-action",
+      "name": "Approve Action",
+      "path": "dist/methods/src/approveAction.ts",
+      "export": "approveAction"
+    },
+    {
+      "id": "decline-action",
+      "name": "Decline Action",
+      "path": "dist/methods/src/declineAction.ts",
+      "export": "declineAction"
+    },
+    {
+      "id": "report-disruption",
+      "name": "Report Disruption",
+      "path": "dist/methods/src/reportDisruption.ts",
+      "export": "reportDisruption"
+    },
+    {
+      "id": "run-call",
+      "name": "Run Call",
+      "path": "dist/methods/src/runCall.ts",
+      "export": "runCall"
+    },
+    {
+      "id": "create-invite",
+      "name": "Create Invite",
+      "path": "dist/methods/src/createInvite.ts",
+      "export": "createInvite"
+    },
+    {
+      "id": "claim-invite",
+      "name": "Claim Invite",
+      "path": "dist/methods/src/claimInvite.ts",
+      "export": "claimInvite"
+    },
+    {
+      "id": "sync-trip",
+      "name": "Sync Trip",
+      "path": "dist/methods/src/syncTrip.ts",
+      "export": "syncTrip"
+    },
+    {
+      "id": "set-approval",
+      "name": "Set Approval",
+      "path": "dist/methods/src/setApproval.ts",
+      "export": "setApproval"
+    },
+    {
+      "id": "remove-collaborator",
+      "name": "Remove Collaborator",
+      "path": "dist/methods/src/removeCollaborator.ts",
+      "export": "removeCollaborator"
+    }
+  ],
+  "interfaces": [
+    {
+      "type": "web",
+      "path": "dist/interfaces/web/web.json"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "weekend-planned",
+      "name": "Weekend in San Francisco (planned)",
+      "description": "A fully planned, confirmed trip with flights, a hotel, and activities, plus a realistic conversation history.",
+      "path": "dist/methods/.scenarios/weekendPlanned.ts",
+      "export": "weekendPlanned",
+      "roles": []
+    },
+    {
+      "id": "mid-disruption",
+      "name": "Mid-disruption",
+      "description": "The same trip, but the outbound flight is delayed and the call to rebook is ready to place.",
+      "path": "dist/methods/.scenarios/midDisruption.ts",
+      "export": "midDisruption",
+      "roles": []
+    },
+    {
+      "id": "fresh-plan",
+      "name": "Fresh plan (pending booking)",
+      "description": "A trip mid-planning with proposed nodes and a booking waiting at the confirm-gate.",
+      "path": "dist/methods/.scenarios/freshPlan.ts",
+      "export": "freshPlan",
+      "roles": []
+    },
+    {
+      "id": "empty-traveler",
+      "name": "Empty traveler",
+      "description": "A signed-in traveler with no trips yet, to show the front-door zero-state.",
+      "path": "dist/methods/.scenarios/emptyTraveler.ts",
+      "export": "emptyTraveler",
+      "roles": []
+    }
+  ],
+  "iconUrl": "https://i.mscdn.ai/df384448-487b-4b39-866e-22f3e209d14f/generated-images/50394e1d-04ed-423e-97f2-f9ee9c3c4fab.png",
+  "openGraphShareImageUrl": "https://i.mscdn.ai/df384448-487b-4b39-866e-22f3e209d14f/generated-images/570164a7-552d-4cae-ae7f-3538c6c9183c.png?w=1200&h=630&fit=cover&fm=jpg&q=90"
+}

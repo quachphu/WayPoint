@@ -1,0 +1,29 @@
+{
+  "name": "waypoint-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mindstudio-ai/interface": "^0.1.9",
+    "@tabler/icons-react": "^3.30.0",
+    "@xyflow/react": "^12.4.4",
+    "gsap": "^3.12.7",
+    "motion": "^12.12.1",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "use-stick-to-bottom": "^1.1.1",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.13",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.8"
+  }
+}

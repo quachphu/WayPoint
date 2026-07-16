@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Waypoint — Build Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400..600&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --canvas: #fcf4ed;
+  --canvas-warm: #fff3e6;
+  --surface: #ffffff;
+  --surface-sunk: #f3ebe1;
+  --ink: #2a2320;
+  --text-2: #6e6459;
+  --text-3: #a2968a;
+  --border: #ede2d5;
+  --border-strong: #ddd0be;
+
+  --accent: #2b57e8;            /* blueberry — action + confirmed */
+  --accent-strong: #1e45cc;
+  --accent-tint: #e9eefc;
+
+  --live: #ff7a2e;              /* tangerine — voice + live */
+  --live-ink: #b4530f;
+  --live-tint: #fceadd;
+
+  --p1:#9a5cf0; --p2:#ef4e9b; --p3:#1fc29a; --p4:#10aec4; --p5:#83be3a; --p6:#2fa8e6;
+
+  --r: 14px;
+  --sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --display: "Fredoka", "DM Sans", var(--sans);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #1b1611;
+    --canvas-warm: #241c15;
+    --surface: #26201a;
+    --surface-sunk: #171310;
+    --ink: #f7efe6;
+    --text-2: #c0b4a6;
+    --text-3: #8a7e70;
+    --border: #38302a;
+    --border-strong: #4a4036;
+
+    --accent: #6e90ff;
+    --accent-strong: #8aa6ff;
+    --accent-tint: rgba(110,144,255,0.16);
+
+    --live: #ff934d;
+    --live-ink: #ffb07a;
+    --live-tint: rgba(255,147,77,0.15);
+
+    --p1:#b084ff; --p2:#ff74b4; --p3:#43d6b0; --p4:#3ecadd; --p5:#a2d95c; --p6:#5cbef0;
+  }
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background:
+    radial-gradient(1100px 560px at 14% -6%, var(--canvas-warm) 0%, transparent 58%),
+    var(--canvas);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.page {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 56px 48px 96px;
+}
+
+/* ---------- Masthead ---------- */
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--border-strong);
+}
+.mark { flex: none; width: 42px; height: 42px; display: block; }
+.masthead .wordmark {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 30px;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+.masthead .kicker {
+  margin-left: auto;
+  font-size: 12px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 600;
+}
+
+/* ---------- Lede ---------- */
+.lede {
+  padding: 42px 0 8px;
+  max-width: 780px;
+}
+.lede h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 34px;
+  line-height: 1.14;
+  letter-spacing: -0.015em;
+  margin-bottom: 20px;
+}
+.lede p {
+  font-size: 18px;
+  line-height: 1.62;
+  color: var(--text-2);
+}
+
+/* ---------- Section scaffolding ---------- */
+section { padding-top: 52px; }
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sec-num {
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  line-height: 1.9;
+}
+.sec-head h2 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+}
+
+/* ---------- Prose ---------- */
+.prose { max-width: 780px; }
+.prose p { color: var(--text-2); }
+.prose p + p { margin-top: 14px; }
+.intro-note { color: var(--text-2); max-width: 780px; margin-bottom: 22px; }
+
+.prose strong, .defs strong, .callout strong { font-weight: 600; color: var(--ink); }
+
+/* ---------- Sheet primitive (flat, hairline-ruled) ---------- */
+.sheet {
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+/* ---------- Definition list (feature rows) ---------- */
+.defs { display: grid; gap: 1px; }
+.defs .row {
+  background: var(--surface);
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  gap: 28px;
+  padding: 18px 22px;
+}
+.defs .term {
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.4;
+}
+.defs .desc { color: var(--text-2); font-size: 15px; line-height: 1.55; }
+
+/* ---------- Data / ops grid ---------- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+}
+.grid .cell { background: var(--surface); padding: 20px 22px; }
+.grid .cell.wide { grid-column: 1 / -1; }
+.grid .cell .lbl {
+  display: block;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+  margin-bottom: 7px;
+}
+.grid .cell .lbl::before {
+  content: "";
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 2px;
+  margin-right: 10px;
+}
+.grid .cell p { color: var(--text-2); font-size: 14px; line-height: 1.52; }
+
+/* ---------- Callout (gate) ---------- */
+.callout {
+  background: var(--surface-sunk);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--accent);
+  border-radius: 4px 4px var(--r) var(--r);
+  padding: 26px 30px;
+  max-width: 840px;
+}
+.callout p { color: var(--text-2); }
+
+/* ---------- Status legend ---------- */
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 22px; }
+.legend .item { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text-2); }
+.legend .gauge { width: 4px; height: 16px; border-radius: 3px; display: inline-block; }
+.g-proposed { background: var(--text-3); opacity: 0.65; }
+.g-confirmed { background: var(--accent); }
+.g-working { background: var(--live); }
+
+/* ---------- Two-column band ---------- */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+
+/* ---------- Integrations ---------- */
+.integ { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+.integ .item .hd {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 17px;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.integ .item p { color: var(--text-2); font-size: 14px; line-height: 1.55; }
+.integ .footnote { margin-top: 24px; color: var(--text-3); font-size: 13px; max-width: 780px; }
+
+/* ---------- Scenario list ---------- */
+.scen { display: grid; gap: 1px; }
+.scen .row {
+  background: var(--surface);
+  display: grid;
+  grid-template-columns: 304px 1fr;
+  gap: 28px;
+  padding: 18px 22px;
+  align-items: baseline;
+}
+.scen .name { font-weight: 600; font-size: 15px; }
+.scen .name em { font-style: normal; color: var(--accent); }
+.scen .desc { color: var(--text-2); font-size: 15px; }
+
+/* ---------- Design signal chips ---------- */
+.signal { display: flex; flex-wrap: wrap; gap: 10px; margin: 2px 0 22px; }
+.signal .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 5px 13px;
+  border-radius: 999px;
+}
+.chip-plan { color: var(--accent); background: var(--accent-tint); }
+.chip-live { color: var(--live-ink); background: var(--live-tint); }
+.chip-people { color: var(--text-2); background: var(--surface-sunk); }
+.chip-people .dots { display: inline-flex; }
+.chip-people .dots i {
+  width: 9px; height: 9px; border-radius: 50%; display: inline-block;
+  margin-right: -3px; box-shadow: 0 0 0 1.5px var(--surface-sunk);
+}
+
+/* ---------- Meta strip ---------- */
+.meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin-top: 46px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-strong);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 500;
+}
+.meta-strip span b { color: var(--accent); font-weight: 600; }
+
+@media (max-width: 860px) {
+  .page { padding: 40px 28px 72px; }
+  .cols { grid-template-columns: 1fr; gap: 40px; }
+  .grid { grid-template-columns: 1fr; }
+  .grid .cell.wide { grid-column: auto; }
+  .integ { grid-template-columns: 1fr; gap: 0; }
+  .integ .item { padding: 18px 0; border-bottom: 1px solid var(--border); }
+  .integ .item:last-of-type { border-bottom: 0; }
+  .integ .item .hd { border: 0; padding-bottom: 4px; margin-bottom: 6px; }
+  .defs .row, .scen .row { grid-template-columns: 1fr; gap: 7px; padding: 16px 18px; }
+  .lede h1 { font-size: 28px; }
+  .lede p { font-size: 16px; }
+}
+@media (max-width: 520px) {
+  .page { padding: 32px 20px 64px; }
+  .masthead .kicker { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <svg class="mark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <radialGradient id="wpSun" cx="40%" cy="36%" r="72%">
+          <stop offset="0%" stop-color="#FFD873"/>
+          <stop offset="52%" stop-color="#FF9F3E"/>
+          <stop offset="100%" stop-color="#FF6A22"/>
+        </radialGradient>
+      </defs>
+      <circle cx="50" cy="51" r="41" fill="#FF7A2E" opacity="0.12"/>
+      <circle cx="50" cy="51" r="34" fill="#FF7A2E" opacity="0.16"/>
+      <circle cx="50" cy="51" r="27" fill="url(#wpSun)"/>
+      <ellipse cx="41" cy="44" rx="7" ry="4.6" fill="#fff" opacity="0.42"/>
+      <circle cx="43" cy="49" r="2.4" fill="#2A2320"/>
+      <circle cx="57" cy="49" r="2.4" fill="#2A2320"/>
+      <path d="M44 56 Q50 61 56 56" fill="none" stroke="#2A2320" stroke-width="2.6" stroke-linecap="round"/>
+    </svg>
+    <span class="wordmark">Waypoint</span>
+    <span class="kicker">Build Overview</span>
+  </header>
+
+  <div class="lede">
+    <h1>Waypoint is a voice-first travel companion.</h1>
+    <p>A traveler says or types where they want to go, and Waypoint plans the trip, holds every booking behind an explicit confirmation, and — when a flight falls apart — re-shops the options, places a disclosed call to the airline, and rebooks only after the traveler says yes. The plan is never described in a paragraph. It renders as a live board of connected nodes that builds while the agent talks, and chat and voice run through the same brain, reading from the same trip state. A trip can be planned alone or shared with the people traveling along, who watch the same board build in real time.</p>
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>What a traveler can do</h2></div>
+    <div class="sheet defs">
+      <div class="row">
+        <div class="term">Plan a trip by talking or typing</div>
+        <div class="desc">A single request ("plan a weekend in San Francisco") starts a trip, searches flights and hotels, suggests real activities, and lays the itinerary onto the board node by node.</div>
+      </div>
+      <div class="row">
+        <div class="term">Watch the plan build live</div>
+        <div class="desc">Flights, hotels, activities, and ground legs appear as cards on a connected board, each showing a status: proposed, confirmed, being worked on, or delayed. Clicking a card opens its full detail beside the board.</div>
+      </div>
+      <div class="row">
+        <div class="term">Approve every spend and every call</div>
+        <div class="desc">Nothing books or dials on its own. A confirmation card states the exact action and the exact charge, with an equally weighted decline. A spoken "yes" resolves it the same way a tap does.</div>
+      </div>
+      <div class="row">
+        <div class="term">Survive a disruption</div>
+        <div class="desc">When a flight is delayed, the affected leg turns to a delayed state, Waypoint re-shops later flights, and — once approved — places a call that opens with a fixed AI-disclosure line, streams the two-sided conversation onto the board, and comes back with a rebooking to confirm.</div>
+      </div>
+      <div class="row">
+        <div class="term">Plan with your people</div>
+        <div class="desc">A traveler can invite companions onto a trip by email, a shareable link, or a text. Everyone on the trip sees the same board build in real time, reads the same conversation, and can talk or type to Waypoint. Each person shows up in their own color, on the board node they are looking at and beside the messages they send.</div>
+      </div>
+      <div class="row">
+        <div class="term">Keep one conversation</div>
+        <div class="desc">Voice and chat share a single thread and a single trip state, so what is said and what is shown never disagree.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>The board</h2></div>
+    <div class="prose">
+      <p>The board is the primary surface. It reads chronologically, left to right on wide screens and top to bottom on narrow ones. Each node is a bright card carrying a rounded kind icon, a title and time, and a meta line, on a warm dotted canvas. Status is unmistakable: a muted dashed card for proposed, a blue icon and a peel-and-stick "Booked" stamp for confirmed, a warm orange glow while the agent is working a node or a leg is delayed. A transient "working on it" indicator appears on a single node while a tool call affecting it is in flight, and resolves in place. Edges are labeled with mode and duration. When companions are present, their colored avatars gather at the corner of the node they are viewing. A detail panel docks beside the board without covering the node it describes, and a translucent call layer rises over the board during a call and gives way to it when the call ends.</p>
+    </div>
+    <div class="legend">
+      <span class="item"><span class="gauge g-proposed"></span>Proposed</span>
+      <span class="item"><span class="gauge g-confirmed"></span>Confirmed</span>
+      <span class="item"><span class="gauge g-working"></span>Working / delayed</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>Data</h2></div>
+    <p class="intro-note">Waypoint keeps seven data stores.</p>
+    <div class="sheet grid">
+      <div class="cell">
+        <span class="lbl">Travelers</span>
+        <p>Holds each signed-in person: their email, display name, home airport, travel preferences (seat, nonstop, hotel style), and a call-consent flag with the time it was given.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Trips</span>
+        <p>Holds each trip's name, destination, dates, headline status, and the current board — its nodes and edges — as a materialized view, plus a version number.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Trip events</span>
+        <p>The append-only log of everything that has happened to a trip: created, proposed, confirmed, updated, disrupted, worked, rebooked, called. The board is derived by folding this log, so every change has a recorded cause.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Pending actions</span>
+        <p>Holds the confirm-gate queue: each proposed booking, call, or rebooking with its exact plain-language summary, a status of pending, approved, executed, or declined, and — when a companion asked for it — who requested it.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Messages</span>
+        <p>Holds the unified conversation — traveler and agent turns, each marked as spoken or typed, and attributed to the person who sent it.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Call sessions</span>
+        <p>The audit record of every outbound call: who it was to, the exact disclosure line spoken first, the full turn-by-turn transcript, the outcome, and the consent basis.</p>
+      </div>
+      <div class="cell wide">
+        <span class="lbl">Trip collaborators</span>
+        <p>Holds who is on each trip: their role (owner or companion), whether they may clear a confirm-gate, their assigned color, their standing invite, and a live heartbeat of when they were last active and which node they were looking at.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>Backend operations</h2></div>
+    <p class="intro-note">Fifteen operations make up the backend.</p>
+    <div class="sheet grid">
+      <div class="cell">
+        <span class="lbl">Get bootstrap</span>
+        <p>Loads the traveler, the trips they own or have joined, and the active trip's full state and roster in one call, claims any invite waiting on their email, and hands a freshly seeded demo trip to the first traveler who opens the app.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">List trips · Get trip</span>
+        <p>Read the trips a traveler owns or is a companion on, and a single trip's board, conversation, gates, latest call, and roster.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Create trip · Update profile</span>
+        <p>Start a trip and save name, home airport, preferences, and call consent.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Converse</span>
+        <p>The single entry point for voice and chat. It runs a multi-step reasoning loop that searches flights and hotels, suggests activities, and proposes board nodes and bookings, streaming the board and the reply as it works, and stamps a companion's requests with their name. It can propose; it can never book or call.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Approve action · Decline action</span>
+        <p>Approve action is the only path that executes a booking, a rebooking, or a call; it refuses anything not still pending, and refuses anyone without approval rights. Decline action dismisses a proposal or cancels a companion's own request.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Report disruption</span>
+        <p>Marks a flight delayed, re-shops later flights, and raises the call to rebook.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Run call</span>
+        <p>Performs the streamed, simulated airline call: it speaks the fixed disclosure first, then generates the conversation turn by turn against the real re-shopped options, records the transcript, and proposes a rebooking behind the gate.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Create invite · Claim invite</span>
+        <p>Mint an invite for a companion and hand back a shareable link, and attach a traveler to a trip when they follow it.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Sync trip</span>
+        <p>The live poll behind shared trips: it records the caller's presence, returns the fresh board only when it has actually changed, and returns everyone else's presence for the live markers.</p>
+      </div>
+      <div class="cell">
+        <span class="lbl">Set approval · Remove collaborator</span>
+        <p>The owner grants or removes a companion's right to approve bookings, and removes someone from a trip.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>The confirmation gate</h2></div>
+    <div class="callout">
+      <p>No operation that spends money or places a call runs on the model's word. The agent can only create a pending action; a separate approval step performs the real work and hard-refuses anything already handled. Because a call transcript or a search result can only ever produce a proposal that still needs a traveler's approval, nothing said on a call — or injected into one — can move money or place a call by itself. Every call opens with the same disclosure line, assembled in code and stored on the call record, never written by the model. On a shared trip, approval stays with the owner unless the owner grants a companion the right; a companion's request waits, visibly, for someone who can approve.</p>
+    </div>
+  </section>
+
+  <div class="cols">
+    <section>
+      <div class="sec-head"><span class="sec-num">06</span><h2>Access</h2></div>
+      <div class="prose">
+        <p>Waypoint uses email-code sign-in. Every signed-in person is a traveler, and a traveler sees only the trips they own or have been invited onto. Owner and companion are standing held per trip, not global roles: the same person can own one trip and be a companion on another. Only the owner manages the people on a trip and can delete it; everything else — planning, talking, inviting — is shared. A signed-out visitor sees a warm welcome screen and the sign-in flow, and nothing else.</p>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="sec-num">08</span><h2>Interface</h2></div>
+      <div class="prose">
+        <p>Waypoint ships one interface: the web app. It carries the whole experience — the welcome and sign-in, the front-door prompt, the live board, the unified conversation, the confirmation gate, the call layer, the people-and-presence surfaces, and a light and dark theme. There are no scheduled or background jobs.</p>
+      </div>
+    </section>
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">07</span><h2>Integrations</h2></div>
+    <div class="integ">
+      <div class="item">
+        <div class="hd">Sabre</div>
+        <p>Provides flight and hotel inventory. Waypoint calls the Sabre certification environment when credentials allow and falls back to realistic simulated inventory in the same shape when they do not, so a plan always completes.</p>
+      </div>
+      <div class="item">
+        <div class="hd">Voice</div>
+        <p>Runs on the browser's built-in speech, so talking to Waypoint works in a standard browser tab, with typing available everywhere as the reliable path. A Vocal Bridge key is stored for a future move to hosted voice.</p>
+      </div>
+      <div class="item">
+        <div class="hd">AI models</div>
+        <p>Power the planning loop and the simulated call, with no separate keys to manage.</p>
+      </div>
+    </div>
+    <p class="footnote">Credentials are held as encrypted secrets — the Sabre token, the Vocal Bridge key, a document-extraction key held for later, and the Sabre environment setting.</p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">09</span><h2>Seeded starting points</h2></div>
+    <p class="intro-note">Four scenarios set the app to a known state for exploring and testing.</p>
+    <div class="sheet scen">
+      <div class="row">
+        <div class="name">Weekend in San Francisco <em>(planned)</em></div>
+        <div class="desc">A fully planned, confirmed trip with round-trip flights, a hotel, and two activities, plus a short conversation history. The default first impression.</div>
+      </div>
+      <div class="row">
+        <div class="name">Mid-disruption</div>
+        <div class="desc">The same trip with the outbound flight delayed and the call to rebook ready to place.</div>
+      </div>
+      <div class="row">
+        <div class="name">Fresh plan <em>(pending booking)</em></div>
+        <div class="desc">A trip mid-planning with proposed nodes and a booking waiting at the gate.</div>
+      </div>
+      <div class="row">
+        <div class="name">Empty traveler</div>
+        <div class="desc">A signed-in traveler with no trips, showing the front-door zero-state.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-num">10</span><h2>Design</h2></div>
+    <div class="signal">
+      <span class="chip chip-plan">Blueberry is action</span>
+      <span class="chip chip-live">Tangerine is live</span>
+      <span class="chip chip-people"><span class="dots"><i style="background:var(--p2)"></i><i style="background:var(--p3)"></i><i style="background:var(--p1)"></i></span>Candy is the people</span>
+    </div>
+    <div class="prose">
+      <p>Waypoint's look is Golden Hour: a warm, sunny companion rather than a cool tool. Bright cards float like stickers on a soft peach canvas, corners are round and soft, and the voice orb is a little sun-drop character with a face that breathes, perks up when it listens, and celebrates a win. Three colors do three jobs and never blur: blueberry blue is action and the confirmed state, warm tangerine is voice and anything genuinely live, and a set of candy colors mark the people on a shared trip. Type is friendly and characterful — a rounded face for names and big moments over a crisp, readable body. Motion is springy by default: nodes pop into place, buttons squish when pressed, avatars bounce in when someone joins.</p>
+      <p>Underneath the charm is restraint. The moments that spend real money — the confirmation gate, the live call, prices and terms — deliberately calm down: tighter corners, quieter motion, no stickers or confetti, the mascot drops its face. Celebrations fire only after something books, never on a decision or a failure. Both a light and a warm espresso dark theme are built from one token system, a strict spacing scale keeps everything aligned, and reduced-motion preferences are fully respected.</p>
+    </div>
+  </section>
+
+  <div class="meta-strip">
+    <span><b>7</b> data stores</span>
+    <span><b>15</b> backend operations</span>
+    <span><b>1</b> interface</span>
+    <span><b>4</b> seeded scenarios</span>
+    <span><b>Email-code</b> access</span>
+  </div>
+
+</div>
+</body>
+</html>

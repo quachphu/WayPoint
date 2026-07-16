@@ -1,0 +1,203 @@
+// Frontend mirror of the backend domain types.
+
+export type NodeKind = 'flight' | 'hotel' | 'activity' | 'ground';
+export type NodeStatus = 'proposed' | 'confirmed' | 'disrupted' | 'failed' | 'cancelled';
+export type EdgeMode = 'flight' | 'drive' | 'walk' | 'transit';
+
+// Who asked for something on a shared trip (companion attribution). Absent for
+// the owner's own actions.
+export interface RequestedBy {
+  userId: string;
+  name: string;
+  color: string;
+}
+
+export interface TripNode {
+  id: string;
+  kind: NodeKind;
+  title: string;
+  subtitle?: string;
+  start: number | null;
+  end: number | null;
+  location: string;
+  status: NodeStatus;
+  working: boolean;
+  bookingRef: string | null;
+  costCents: number | null;
+  dependsOn: string[];
+  detail?: Record<string, any>;
+  requestedBy?: RequestedBy | null;
+}
+
+export interface TripEdge {
+  id: string;
+  from: string;
+  to: string;
+  mode: EdgeMode;
+  label: string;
+  state: 'default' | 'working';
+}
+
+export type TripStatus = 'planning' | 'confirmed' | 'disrupted' | 'complete';
+
+export interface Trip {
+  id: string;
+  userId: string;
+  title: string;
+  destination: string;
+  origin?: string;
+  startDate: number | null;
+  endDate: number | null;
+  status: TripStatus;
+  nodes: TripNode[];
+  edges: TripEdge[];
+  version: number;
+  created_at?: number;
+  updated_at?: number;
+}
+
+export interface TripSummary {
+  id: string;
+  title: string;
+  destination: string;
+  startDate: number | null;
+  endDate: number | null;
+  status: TripStatus;
+  version: number;
+  nodeCount: number;
+  updatedAt?: number;
+}
+
+export interface Message {
+  id: string;
+  tripId: string;
+  role: 'user' | 'agent';
+  text: string;
+  source: 'voice' | 'chat' | 'system';
+  status: 'streaming' | 'complete';
+  created_at?: number;
+  // Shared-trip attribution: set on another person's user messages.
+  authorId?: string | null;
+  authorName?: string | null;
+  authorColor?: string | null;
+}
+
+export type ActionKind = 'book_flight' | 'book_hotel' | 'book_activity' | 'place_call' | 'rebook';
+
+export interface PendingAction {
+  id: string;
+  tripId: string;
+  nodeId: string | null;
+  kind: ActionKind;
+  summary: string;
+  payload: Record<string, any>;
+  status: 'pending' | 'approved' | 'executed' | 'declined' | 'expired';
+  resolvedAt: number | null;
+  requestedBy?: RequestedBy | null;
+}
+
+// A person on a trip (owner or companion), enriched with name + presence color.
+export interface RosterMember {
+  id: string;
+  userId: string | null;
+  email: string;
+  displayName: string | null;
+  role: 'owner' | 'companion';
+  canApprove: boolean;
+  presenceColor: string;
+  status: 'invited' | 'active';
+  focusNodeId: string | null;
+  lastSeenAt: number | null;
+  isYou: boolean;
+}
+
+export interface CallTurn {
+  speaker: 'waypoint' | 'venue';
+  text: string;
+  at: number;
+}
+
+export interface CallSession {
+  id: string;
+  tripId: string;
+  nodeId: string;
+  target: string;
+  goal: string;
+  disclosureLine: string;
+  status: 'dialing' | 'connected' | 'in_progress' | 'ended' | 'failed';
+  subStatus: string;
+  transcript: CallTurn[];
+  outcome: string | null;
+  consentBasis: string;
+  context: Record<string, any>;
+  startedAt: number;
+  endedAt: number | null;
+}
+
+export interface User {
+  id: string;
+  email: string | null;
+  roles: string[];
+  displayName?: string;
+  phone?: string;
+  homeAirport?: string;
+  preferences?: { seat?: 'window' | 'aisle'; nonstopPreferred?: boolean; hotelStyle?: string; notes?: string };
+  callConsent?: boolean;
+  callConsentAt?: number;
+}
+
+export interface TripBundle {
+  trip: Trip | null;
+  messages: Message[];
+  pendingActions: PendingAction[];
+  activeCall: CallSession | null;
+  roster?: RosterMember[];
+}
+
+export interface Bootstrap {
+  authenticated: boolean;
+  user?: User | null;
+  trips?: TripSummary[];
+  activeTripId?: string | null;
+  trip?: Trip | null;
+  messages?: Message[];
+  pendingActions?: PendingAction[];
+  activeCall?: CallSession | null;
+  roster?: RosterMember[];
+}
+
+// The live poll result. `changed:false` means the trip is unchanged since the
+// caller's version — only the roster (with presence) came back.
+export type SyncResult =
+  | { changed: false; version: number; roster: RosterMember[] }
+  | {
+      changed: true;
+      version: number;
+      roster: RosterMember[];
+      trip: Trip;
+      messages: Message[];
+      pendingActions: PendingAction[];
+      activeCall: CallSession | null;
+    };
+
+export interface InviteResult {
+  ok: boolean;
+  invitePath: string;
+  collaboratorId: string;
+  email: string;
+  tripTitle: string;
+  invitedByName: string | null;
+  roster: RosterMember[];
+}
+
+// Structured stream events emitted by converse / reportDisruption / runCall.
+export type StreamEvent =
+  | { type: 'status'; text: string }
+  | { type: 'trip_created'; trip: Trip }
+  | { type: 'ghost'; kind: NodeKind; on: boolean }
+  | { type: 'node'; op: 'add' | 'update'; node: TripNode }
+  | { type: 'edge'; op: 'add' | 'update' | 'remove'; edge: TripEdge }
+  | { type: 'working'; nodeId: string; on: boolean }
+  | { type: 'gate'; action: PendingAction }
+  | { type: 'call_turn'; turn: CallTurn; subStatus: string; callSessionId: string }
+  | { type: 'call_status'; status: CallSession['status']; subStatus: string; outcome?: string; callSessionId: string };

@@ -1,0 +1,56 @@
+# Build plan
+A phased plan for building this end-to-end, in dependency order, each phase gated by a real definition of done rather than a time box. Sequence matters more than schedule here: each phase produces something the next one genuinely depends on, so treat the order as load-bearing even if the pacing through it is whatever the team's real velocity turns out to be.
+## Phase 0 — Foundations
+Get the full path from code to a live, reachable deployment working before building any feature on top of it, so deployment is never the thing that's untested right before it matters.
+- Repo scaffold matching the module boundaries in `docs/02_ARCHITECTURE.md` §1-2
+- CI running on every push (lint, type-check, tests, even with zero tests yet, wire the pipeline)
+- Real deployment target live with a placeholder page, both frontend and backend
+- Sabre and Vocal Bridge credentials wired end to end and verified with one real call each: a real Sabre auth token exchange, a real Vocal Bridge test call, not mocked responses
+- Postgres provisioned, `TripNode` and `TripEvent` tables migrated (`docs/02_ARCHITECTURE.md` §3.1-3.2), with tests for the fold-derivation logic specifically, since that's the piece everything else trusts
+**Definition of done**: an empty app is live at a real URL, and a smoke test proves both third-party integrations return genuine, non-mocked responses.
+## Phase 1 — The planning conversation, via chat first
+Build and validate the core reasoning loop through chat before adding voice, this isolates "does the agent plan correctly" from "does the voice pipeline work," which are two different classes of bug and are much easier to debug separately.
+- Orchestrator as a LangGraph `StateGraph` with a Postgres checkpointer (`docs/02_ARCHITECTURE.md` §4)
+- Flight and lodging agents wired to real Sabre Bargain Finder Max and hotel availability (`docs/03_API_INTEGRATION.md` §1.3-1.4), including the mandatory offer-revalidation step before any booking
+- The confirm-gate implemented as an `interrupt()` before every booking node, tested on both the approve and the decline/revise path, not just the happy path
+- Chat surface (send message, see agent's reasoning and proposals, confirm or revise) fully working end to end
+**Definition of done**: a complete planning conversation, real Sabre search through real Sabre booking, completes correctly via chat alone, including at least one revision loop (user rejects a proposal and the agent replans).
+## Phase 2 — Voice
+Layer voice onto the already-working reasoning loop rather than building both at once.
+- Vocal Bridge integration via the embedded pattern (`docs/03_API_INTEGRATION.md` §2.2-2.3), backend token issuance, client SDK connected
+- The "bring your own agent" callback (`vb.onAIAgentQuery`) wired to the same orchestrator entry point Phase 1 built, this is the point that proves voice and chat are genuinely one system, not two
+- Voice presence indicator and live transcript rendering per `docs/05_DESIGN_SYSTEM.md` §3.1
+**Definition of done**: the identical planning conversation from Phase 1's definition of done completes via voice alone, with an outcome indistinguishable from the chat path (same booking, same confirmation).
+## Phase 3 — The planning board
+Now that trip state is reliably produced by Phase 1-2, give it the visual surface specified in full in `docs/07_PLANNING_BOARD.md`.
+- React Flow implementation, node and edge components matching the design tokens
+- The bidirectional Client Actions wiring: agent-to-board diffs, and board-clicks-to-agent context, both directions, tested independently
+- Detail panel, including the transient "agent is working on this" indicator tied to real in-flight tool calls, not a fake loading spinner
+**Definition of done**: the board builds live and correctly during a real planning conversation from either voice or chat, and clicking any node opens accurate, current detail, and the agent can correctly reference "the one you just clicked" in its next response.
+## Phase 4 — Disruption and outbound calling
+The highest-stakes phase, both technically and from a compliance standpoint. Do not shortcut `docs/04_SECURITY_COMPLIANCE.md` here.
+- Booking retrieval by confirmation ID and re-shop against Sabre (`docs/03_API_INTEGRATION.md` §1.5)
+- Outbound calling via Vocal Bridge with the mandatory AI disclosure as the literal first line of the call script, and the consent flag check before any call to a user's own number
+- The board reflects disruption state live: node transitions to the disrupted state, the transient indicator reappears, the detail panel shows the live transcript inline (`docs/07_PLANNING_BOARD.md` §8)
+- The confirm-gate on rebooking specifically hardened against the untrusted-transcript case in `docs/04_SECURITY_COMPLIANCE.md` §2, prove with a test that a call transcript alone, however it's worded, cannot cause a booking to execute without the separate user confirmation
+**Definition of done**: a real outbound call completes, its transcript streams into both the board and chat live, and rebooking only executes after an explicit, separately-captured user confirmation, verified with a test that specifically tries to defeat this via transcript content.
+## Phase 5 — Hardening
+The phase that turns "it worked when I tried it" into "it works."
+- Idempotency keys on every booking and calling action (combine a stable action id with the triggering event id), verified with a test that deliberately retries an action and confirms no duplicate booking or duplicate call results
+- Every edge case in `docs/01_PRODUCT_BRIEF.md` §7 has explicit handling and a test, not just the ones that happened to come up during Phase 1-4 development
+- Concurrent-update testing: simulate voice and chat updating the same trip near-simultaneously and verify the event log and derived state stay correct (`docs/02_ARCHITECTURE.md` §3.2)
+- A full pass against `docs/04_SECURITY_COMPLIANCE.md` as a literal checklist, each item checked off with evidence, not assumed
+**Definition of done**: the edge-case table in the product brief is a test suite, not a wish list, and it passes.
+## Phase 6 — Design and accessibility pass
+Deliberately sequenced after the functionality is real, a polished UI around a broken flow is worse than a plain one that works, but a working product deserves the full design system, not a partial one.
+- Full application of `docs/05_DESIGN_SYSTEM.md` across every screen and component, including the board's node/edge visual treatment
+- Keyboard navigation for the board (select, open detail, dismiss), and screen-reader labeling for every node and status change, this isn't optional polish, Apple's own principles this design language draws from treat accessibility as core, not an afterthought
+- Dark mode verified against the token set in `docs/05_DESIGN_SYSTEM.md` §2.3, not just assumed to work because the tokens are theoretically adaptive
+**Definition of done**: every user workflow in `docs/01_PRODUCT_BRIEF.md` §6 is completable without a mouse, and the visual language is consistent, not "mostly done."
+## Phase 7 — Deploy and validate
+- Final deployment target hardened (real secrets management, not development defaults, per `docs/04_SECURITY_COMPLIANCE.md` §1)
+- Walk every workflow in `docs/01_PRODUCT_BRIEF.md` §6 against the actual deployed instance, not a local dev environment, and record the result
+- Only this phase's completion, not any earlier one, constitutes the product being genuinely done
+## Working notes on the two harder infrastructure decisions
+**Temporal vs. LangGraph-checkpointing-plus-retries** (`docs/02_ARCHITECTURE.md` §5): decide this once, early, in Phase 0 or 1, not mid-build. If the team has real Temporal experience, use it for the disruption workflow specifically, it's the technically correct tool for a workflow that retries, waits indefinitely for human input, and must survive a process restart. If not, the LangGraph-checkpointer-plus-explicit-retry path is a legitimate, honestly-described choice, don't retrofit Temporal later just to feel more "production," retrofit it if and when the retry logic actually proves insufficient in practice.
+**Testing the outbound call flow without calling real airlines**: build a controllable stand-in for the far end of any outbound call starting in Phase 4, not as something retrofitted once the feature is otherwise "done." Either a second small Vocal Bridge or AgentPhone-backed responder playing "the airline," or, for early development, a simple mock server that answers scripted responses. Never point automated tests, or manual QA at any stage, at a real airline or hotel support line, both because it won't behave predictably and because of the compliance considerations in `docs/04_SECURITY_COMPLIANCE.md` §3.
