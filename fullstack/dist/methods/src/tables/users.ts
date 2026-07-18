@@ -1,5 +1,7 @@
 import { db } from '@mindstudio-ai/agent';
 
+export type Gender = 'male' | 'female' | 'lgbtq+';
+
 // Auth table + traveler profile. email and roles are platform-managed.
 // All other columns are optional until onboarding fills them.
 export interface User {
@@ -16,6 +18,30 @@ export interface User {
   };
   callConsent?: boolean;
   callConsentAt?: number; // unix ms
+  // Captured client-side (browser geolocation, reverse-geocoded) on each
+  // sign-in so location-based discovery (people nearby) stays current.
+  location?: {
+    city?: string;
+    region?: string; // state/province
+    country?: string;
+    lat?: number;
+    lng?: number;
+    updatedAt: number;
+  };
+  // Social profile, filled in during onboarding right after signup. Gender
+  // picks the default avatar (male/female/lgbtq+ each map to a stock image)
+  // until a custom photo upload exists, and is locked once set (see
+  // updateProfile.ts). `profileComplete` gates whether the onboarding
+  // screen shows again on the next sign-in.
+  gender?: Gender;
+  dateOfBirth?: string; // ISO date, e.g. "1998-05-14"
+  hobbies?: string[]; // feeds Grok's trending-places personalization too
+  profession?: string;
+  favoriteGames?: string[];
+  favoriteMusic?: string[];
+  languages?: string[];
+  photoUrl?: string; // data URI of a self-uploaded photo; absent = use the gender default
+  profileComplete?: boolean;
 }
 
 export const Users = db.defineTable<User>('users');

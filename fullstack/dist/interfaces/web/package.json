@@ -5,21 +5,29 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "start": "vite --host 0.0.0.0 --port ${PORT:-5173}",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@mindstudio-ai/interface": "^0.1.9",
     "@tabler/icons-react": "^3.30.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vocalbridgeai/sdk": "^0.1.1",
     "@xyflow/react": "^12.4.4",
     "gsap": "^3.12.7",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.577.0",
     "motion": "^12.12.1",
+    "qrcode": "^1.5.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "tailwindcss": "^4.3.3",
     "use-stick-to-bottom": "^1.1.1",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.21",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.13",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",

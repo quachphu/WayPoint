@@ -134,6 +134,17 @@ export interface CallSession {
   endedAt: number | null;
 }
 
+export interface UserLocation {
+  city?: string;
+  region?: string;
+  country?: string;
+  lat?: number;
+  lng?: number;
+  updatedAt: number;
+}
+
+export type Gender = 'male' | 'female' | 'lgbtq+';
+
 export interface User {
   id: string;
   email: string | null;
@@ -144,6 +155,119 @@ export interface User {
   preferences?: { seat?: 'window' | 'aisle'; nonstopPreferred?: boolean; hotelStyle?: string; notes?: string };
   callConsent?: boolean;
   callConsentAt?: number;
+  location?: UserLocation;
+  gender?: Gender;
+  dateOfBirth?: string;
+  hobbies?: string[];
+  profession?: string;
+  favoriteGames?: string[];
+  favoriteMusic?: string[];
+  languages?: string[];
+  photoUrl?: string;
+  profileComplete?: boolean;
+}
+
+export type LocationScope = 'city' | 'region' | 'country';
+
+export interface NearbyUser {
+  id: string;
+  displayName: string | null;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  gender: Gender | null;
+  photoUrl: string | null;
+  age: number | null;
+  isBirthdayToday: boolean;
+  profession: string | null;
+  hobbies: string[];
+  favoriteGames: string[];
+  favoriteMusic: string[];
+  languages: string[];
+  sharedInterestCount: number;
+  recommended: boolean;
+  friendStatus: FriendStatus;
+  friendRequestId: string | null;
+}
+
+export type FriendStatus = 'none' | 'pending_outgoing' | 'pending_incoming' | 'friends';
+
+export interface FriendRequestSummary {
+  id: string;
+  fromUserId: string;
+  displayName: string | null;
+  gender: Gender | null;
+  photoUrl: string | null;
+  createdAt: number;
+}
+
+export interface ConversationSummary {
+  id: string;
+  type: 'direct' | 'group';
+  title: string | null;
+  lastMessageAt: number;
+  lastMessagePreview: string | null;
+  participants: { id: string; displayName: string | null; gender: Gender | null; photoUrl: string | null }[];
+}
+
+export interface ConversationParticipant {
+  id: string;
+  displayName: string | null;
+  gender: Gender | null;
+  photoUrl: string | null;
+  isMe: boolean;
+}
+
+export interface TripSuggestion {
+  destination: string;
+  originCity?: string;
+}
+
+export interface FlightOffer {
+  id: string;
+  source: 'sabre' | 'simulated';
+  carrier: string;
+  carrierCode: string;
+  flightNumber: string;
+  origin: string;
+  destination: string;
+  departAt: number;
+  arriveAt: number;
+  durationMin: number;
+  stops: number;
+  priceCents: number;
+  fareBrand: string;
+  cabin: string;
+}
+
+export interface ChatTicket {
+  bookingRef: string;
+  costCents: number;
+  offer: FlightOffer;
+  bookedBy: string;
+  bookedByName?: string;
+}
+
+export interface ConversationMessage {
+  id: string;
+  senderId: string;
+  text: string;
+  createdAt: number;
+  tripSuggestion?: TripSuggestion | null;
+  flightOffer?: FlightOffer | null;
+  ticket?: ChatTicket | null;
+}
+
+// senderId value for a mascot-authored message (trip suggestions) — not a
+// real user, so it won't appear in a conversation's participants list.
+export const MASCOT_SENDER_ID = 'waypoint-ai';
+
+export interface TrendingPlace {
+  name: string;
+  category: 'restaurant' | 'cafe' | 'attraction' | 'shop' | 'activity';
+  blurb: string;
+  lat: number;
+  lng: number;
 }
 
 export interface TripBundle {
@@ -188,6 +312,17 @@ export interface InviteResult {
   tripTitle: string;
   invitedByName: string | null;
   roster: RosterMember[];
+}
+
+// Connection credentials minted server-side for a Vocal Bridge voice session
+// (shape mirrors the SDK's TokenResponse).
+export interface VoiceToken {
+  url: string;
+  token: string;
+  room_name: string;
+  participant_identity: string;
+  expires_in: number;
+  agent_mode?: string;
 }
 
 // Structured stream events emitted by converse / reportDisruption / runCall.

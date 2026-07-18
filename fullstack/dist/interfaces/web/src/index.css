@@ -11,6 +11,12 @@
   --surface-hover: #fbf6f0;
   --border-warm: #ede2d5;
   --border-warm-strong: #dfd2c2;
+  /* Endpoints of the .welcome/.auth backdrop gradient — themed so dark mode
+     doesn't blend these hardcoded light tones with a near-black canvas into
+     a muddy indeterminate brown (the bug that was making onboarding/auth
+     screens look washed-out and un-designed in dark mode). */
+  --welcome-edge-a: #fff3e4;
+  --welcome-edge-b: #fbe8dc;
 
   --text: #2a2320;
   --text-2: #6e6459;
@@ -110,6 +116,8 @@
   --surface-hover: #2e271f;
   --border-warm: #3a322a;
   --border-warm-strong: #4a4036;
+  --welcome-edge-a: #302319;
+  --welcome-edge-b: #201811;
 
   --text: #f7efe6;
   --text-2: #c0b4a6;
@@ -143,10 +151,17 @@
   --shadow-gate: 0 20px 60px rgba(0, 0, 0, 0.55);
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/* In its own layer (and declared first, so it's the lowest-priority layer)
+   so Tailwind's margin/padding utilities (src/tailwind.css) can still win —
+   per the CSS cascade layers spec, an unlayered rule always beats a layered
+   one regardless of specificity, so left bare this would silently zero out
+   every Tailwind margin and padding utility class in the app. */
+@layer reset {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 }
 
 html,
@@ -1130,6 +1145,33 @@ textarea {
   color: var(--accent-voice-strong);
   border-color: transparent;
 }
+/* Deliberately loud — a solid filled pill with a text label, not a subtle
+   icon-only control that only shows feedback on hover. This is the one
+   control that lets someone escape a fullscreen map, so it must never be
+   easy to lose track of. */
+.map-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: var(--r-full);
+  background: var(--live);
+  color: var(--on-accent);
+  border: none;
+  box-shadow: var(--shadow-3);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: transform var(--t-fast) var(--ease-settle), background var(--t-fast) ease;
+}
+.map-toggle-btn:hover {
+  background: var(--live-deep);
+}
+.map-toggle-btn:active {
+  transform: scale(0.96);
+}
 .beacon-dot {
   width: 10px;
   height: 10px;
@@ -1380,7 +1422,7 @@ textarea {
 .welcome {
   height: 100%;
   position: relative;
-  background: linear-gradient(170deg, #fff3e4 0%, var(--canvas) 55%, #fbe8dc 100%);
+  background: linear-gradient(170deg, var(--welcome-edge-a) 0%, var(--canvas) 55%, var(--welcome-edge-b) 100%);
   color: var(--text);
   display: flex;
   align-items: center;
@@ -1451,7 +1493,7 @@ textarea {
 .welcome-title {
   font-size: clamp(34px, 6vw, 48px);
   font-weight: 600;
-  margin: 24px 0 14px;
+  margin: 20px 0 14px;
   line-height: 1.05;
 }
 .welcome-sub {
@@ -1551,6 +1593,317 @@ textarea {
   border: solid #fff;
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
+}
+
+/* onboarding / profile setup */
+.onboard-card {
+  position: relative;
+  z-index: 2;
+  width: min(680px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--surface);
+  border-radius: var(--r-xl);
+  padding: 40px 44px;
+  box-shadow: var(--shadow-3);
+  animation: rise-in var(--t-panel) var(--ease-panel) both;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-warm) transparent;
+}
+.onboard-card::-webkit-scrollbar {
+  width: 7px;
+}
+.onboard-card::-webkit-scrollbar-track {
+  background: transparent;
+}
+.onboard-card::-webkit-scrollbar-thumb {
+  background: var(--border-warm);
+  border-radius: 999px;
+}
+/* Each block rises in with a slight stagger — a rare, once-per-account
+   screen is exactly where that bit of delight earns its keep. `backwards`
+   only (not `both`): holding the end state permanently leaves a resolved
+   transform matrix (not the literal keyword `none`) on every direct child,
+   which silently creates a stacking context on each of them — that broke
+   the gender dropdown, letting a later section paint over it regardless of
+   z-index. `backwards` still avoids a pre-animation flash during the delay,
+   but lets the element cleanly revert to "no transform" once it's done. */
+.onboard-card > * {
+  animation: rise-in 460ms var(--ease-settle) backwards;
+}
+.onboard-card > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.onboard-card > *:nth-child(2) {
+  animation-delay: 40ms;
+}
+.onboard-card > *:nth-child(3) {
+  animation-delay: 80ms;
+}
+.onboard-card > *:nth-child(n + 4) {
+  animation-delay: 110ms;
+}
+/* Every section is its own soft-elevated panel (not a hairline-divided list)
+   so the long form reads as a set of distinct, designed modules rather than
+   one flat wall of fields bleeding into the card background. */
+.onboard-section {
+  margin-top: 16px;
+  padding: 20px 22px;
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--border-warm);
+}
+.onboard-section:first-of-type {
+  margin-top: 26px;
+}
+.onboard-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+  letter-spacing: -0.01em;
+}
+.onboard-label::before {
+  content: '';
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--live);
+  flex-shrink: 0;
+}
+.onboard-hint {
+  font-size: 12.5px;
+  color: var(--text-2);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.onboard-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+.onboard-row .onboard-section {
+  margin-top: 0;
+}
+/* Scoped so this one screen reads as a single warm, orange-accented moment
+   instead of mixing in the app-wide blue --accent used by ordinary forms.
+   Fields sit one step lighter than their section panel (--surface, not
+   --surface-2) so they read as the interactive surface, not more backdrop. */
+.onboard-card .field,
+.profile-card .field {
+  background: var(--surface);
+  border-color: var(--border-warm);
+  transition: border-color var(--t-fast) var(--ease-inout), box-shadow var(--t-fast) var(--ease-inout), background var(--t-fast) ease;
+}
+.onboard-card .field:hover,
+.profile-card .field:hover {
+  border-color: var(--border-strong);
+}
+.onboard-card .field:focus,
+.profile-card .field:focus {
+  outline: none;
+  border-color: var(--live);
+  box-shadow: 0 0 0 3px var(--live-tint);
+  background: var(--surface);
+}
+/* Same reasoning as the field focus ring above — keep the CTA in the one
+   accent this screen already uses, instead of the app-wide blue --accent. */
+.onboard-card .btn--primary,
+.profile-card .btn--primary {
+  background: var(--live);
+  box-shadow: 0 8px 20px color-mix(in oklch, var(--live) 32%, transparent);
+}
+.onboard-card .btn--primary:hover:not(:disabled),
+.profile-card .btn--primary:hover:not(:disabled) {
+  background: var(--live-deep);
+}
+/* The profile-edit page — same visual language as onboarding (sections,
+   fields, chips) but living in the normal page flow, not a modal-style
+   overlay, so no max-height/scroll/entrance-stagger here. */
+.profile-card {
+  width: min(720px, 100%);
+  background: var(--surface);
+  border-radius: var(--r-xl);
+  padding: 36px 40px;
+  box-shadow: var(--shadow-3);
+}
+.profile-card .onboard-section:first-of-type {
+  margin-top: 0;
+}
+.danger-zone {
+  margin-top: 16px;
+  padding: 20px 22px;
+  border-radius: var(--r-lg);
+  background: color-mix(in oklch, var(--danger-c) 8%, var(--surface-2));
+  border: 1px solid color-mix(in oklch, var(--danger-c) 25%, var(--border-warm));
+}
+/* A big, unmistakable profile picture — crisp accent ring instead of a
+   blurred glow, so it reads as "tap this" rather than an ambiguous smudge. */
+.onboard-avatar-lg {
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-2);
+  border: 4px solid var(--surface);
+  box-shadow: 0 0 0 3px var(--live), var(--shadow-2);
+  transition: transform var(--t-panel) var(--ease-settle);
+}
+.gender-picker {
+  position: relative;
+}
+.gender-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  cursor: pointer;
+}
+.gender-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  background: var(--surface);
+  border: 1px solid var(--border-warm);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  padding: 6px;
+  transform-origin: top center;
+  /* No fill-mode needed — it only mounts when open, so there's no
+     pre-animation state to hold, and no reason to leave a lingering
+     transform around after it finishes settling. */
+  animation: menu-in 140ms var(--ease-settle);
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.gender-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: var(--r-md);
+  font-family: var(--font-space);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  transition: background var(--t-fast) ease;
+}
+.gender-menu-item:hover {
+  background: var(--surface-2);
+}
+.gender-menu-item.selected {
+  color: var(--live);
+  font-weight: 600;
+}
+.learning-inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  max-width: 460px;
+  text-align: center;
+  padding: 0 24px;
+}
+.learning-mascot {
+  object-fit: contain;
+  filter: drop-shadow(0 10px 30px color-mix(in oklch, var(--live) 50%, transparent));
+  animation: mascot-learn 1.8s ease-in-out infinite;
+}
+@keyframes mascot-learn {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+/* A transition (not a fixed-duration keyframe animation) — the hold time
+   between fade-in and fade-out is however long that line's audio actually
+   takes to finish (see LearningScreen.tsx's speak()-driven step effect),
+   which isn't known ahead of time, so it can't be baked into an animation
+   duration. Fade-in plays automatically on mount via @starting-style; the
+   `is-fading` class is toggled once speech actually ends. */
+.learning-line {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 1.6em;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 350ms var(--ease-inout), transform 350ms var(--ease-inout);
+
+  @starting-style {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.learning-line.is-fading {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+.learning-dots {
+  display: flex;
+  gap: 8px;
+}
+.learning-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-warm-strong);
+  transition: background 300ms ease, transform 300ms ease;
+}
+.learning-dot.active {
+  background: var(--live);
+  transform: scale(1.3);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-warm);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform var(--t-fast) var(--ease-settle), border-color var(--t-fast) ease, background var(--t-fast) ease, color var(--t-fast) ease;
+}
+.chip:hover {
+  border-color: var(--live);
+}
+.chip:active {
+  transform: scale(0.96);
+}
+.chip.selected {
+  background: var(--live);
+  border-color: var(--live);
+  color: var(--on-accent);
+}
+.chip.selected:hover {
+  border-color: var(--live);
 }
 
 /* digit celebration */
@@ -2053,4 +2406,33 @@ textarea {
   .gate-held-bar,
   .wp-menu,
   .wp-people { animation: none; }
+}
+
+/* ============================================================ leaflet popups
+   Leaflet's default popup chrome is a plain white box in the browser's
+   default font — completely unbranded and out of place next to the rest of
+   the app. Re-skinned to use our own surface/shadow/radius tokens; the
+   popup's own inner content is styled per-instance via popupHtml() in
+   LocationMap.tsx (it needs inline styles since it's raw HTML handed to
+   Leaflet, not JSX). */
+.wp-popup .leaflet-popup-content-wrapper {
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--r-lg, 12px);
+  box-shadow: var(--shadow-2);
+  padding: 2px;
+}
+.wp-popup .leaflet-popup-content {
+  margin: 12px 14px;
+}
+.wp-popup .leaflet-popup-tip {
+  background: var(--surface);
+  box-shadow: none;
+}
+.wp-popup a.leaflet-popup-close-button {
+  color: var(--text-3);
+  padding: 6px 8px 0 0;
+}
+.wp-popup a.leaflet-popup-close-button:hover {
+  color: var(--text);
 }

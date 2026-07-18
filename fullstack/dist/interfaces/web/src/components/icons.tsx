@@ -27,6 +27,13 @@ import {
   IconUserCheck,
   IconUserPlus,
   IconHourglassLow,
+  IconArrowLeft,
+  IconSend2,
+  IconSparkles,
+  IconMaximize,
+  IconMinimize,
+  IconCamera,
+  IconLock,
 } from '@tabler/icons-react';
 import type { NodeKind } from '../lib/types';
 
@@ -73,4 +80,11 @@ export {
   IconUserCheck,
   IconUserPlus,
   IconHourglassLow,
+  IconArrowLeft,
+  IconSend2,
+  IconSparkles,
+  IconMaximize,
+  IconMinimize,
+  IconCamera,
+  IconLock,
 };

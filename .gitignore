@@ -1,0 +1,9 @@
+# Secrets — never commit
+.env
+.env.*
+
+node_modules/
+.DS_Store
+
+# standalone server data (SQLite)
+.data/

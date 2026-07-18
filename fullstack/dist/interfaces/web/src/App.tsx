@@ -4,8 +4,13 @@ import { useStore } from './lib/store';
 import { Welcome } from './components/Welcome';
 import { LoginFlow } from './components/auth/LoginFlow';
 import { AppShell } from './components/AppShell';
+import { Home } from './components/Home';
 import { ConfirmGate } from './components/ConfirmGate';
 import { Toasts } from './components/Toasts';
+import { MascotWidget } from './components/MascotWidget';
+import { ChatDock } from './components/social/ChatDock';
+import { ProfileSetup } from './components/onboarding/ProfileSetup';
+import { ProfilePage } from './components/profile/ProfilePage';
 
 function CompletingSignIn() {
   return (
@@ -58,6 +63,8 @@ export default function App() {
   const bootstrap = useStore((s) => s.bootstrap);
   const setTheme = useStore((s) => s.setTheme);
   const loading = useStore((s) => s.loading);
+  const profile = useStore((s) => s.profile);
+  const view = useStore((s) => s.view);
   const activeTripId = useStore((s) => s.activeTripId);
   const pollSync = useStore((s) => s.pollSync);
   const claimByToken = useStore((s) => s.claimByToken);
@@ -127,11 +134,22 @@ export default function App() {
     return showLogin ? <LoginFlow onBack={() => setShowLogin(false)} /> : <Welcome onStart={() => setShowLogin(true)} />;
   }
 
+  if (!loading && profile && !profile.profileComplete) {
+    return (
+      <>
+        <ProfileSetup />
+        <Toasts />
+      </>
+    );
+  }
+
   return (
     <>
-      {loading ? <ShellSkeleton /> : <AppShell />}
+      {loading ? <ShellSkeleton /> : view === 'home' ? <Home /> : view === 'profile' ? <ProfilePage /> : <AppShell />}
       <ConfirmGate />
       <Toasts />
+      <ChatDock />
+      <MascotWidget />
     </>
   );
 }

@@ -1,15 +1,9 @@
-// Side-effect import: loads the platform SDK so it can auto-init analytics
-// (pageviews, presence) and uncaught-error reporting on startup. Required
-// even if you don't call SDK methods directly — without this, Vite tree-
-// shakes the package out of the bundle and telemetry never starts. Do not
-// remove unless you intentionally want to disable platform telemetry.
-import '@mindstudio-ai/interface';
-
 import { Component, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@xyflow/react/dist/style.css';
 import App from './App.tsx';
 import './index.css';
+import './tailwind.css';
 
 class ErrorBoundary extends Component<
   { children: ReactNode },

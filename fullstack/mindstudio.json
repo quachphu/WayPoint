@@ -115,6 +115,12 @@
       "export": "runCall"
     },
     {
+      "id": "get-voice-token",
+      "name": "Get Voice Token",
+      "path": "dist/methods/src/getVoiceToken.ts",
+      "export": "getVoiceToken"
+    },
+    {
       "id": "create-invite",
       "name": "Create Invite",
       "path": "dist/methods/src/createInvite.ts",
@@ -143,6 +149,90 @@
       "name": "Remove Collaborator",
       "path": "dist/methods/src/removeCollaborator.ts",
       "export": "removeCollaborator"
+    },
+    {
+      "id": "set-location",
+      "name": "Set Location",
+      "path": "dist/methods/src/setLocation.ts",
+      "export": "setLocation"
+    },
+    {
+      "id": "list-nearby-users",
+      "name": "List Nearby Users",
+      "path": "dist/methods/src/listNearbyUsers.ts",
+      "export": "listNearbyUsers"
+    },
+    {
+      "id": "start-conversation",
+      "name": "Start Conversation",
+      "path": "dist/methods/src/startConversation.ts",
+      "export": "startConversation"
+    },
+    {
+      "id": "list-conversations",
+      "name": "List Conversations",
+      "path": "dist/methods/src/listConversations.ts",
+      "export": "listConversations"
+    },
+    {
+      "id": "get-conversation",
+      "name": "Get Conversation",
+      "path": "dist/methods/src/getConversation.ts",
+      "export": "getConversation"
+    },
+    {
+      "id": "send-direct-message",
+      "name": "Send Direct Message",
+      "path": "dist/methods/src/sendDirectMessage.ts",
+      "export": "sendDirectMessage"
+    },
+    {
+      "id": "get-trending-places",
+      "name": "Get Trending Places",
+      "path": "dist/methods/src/getTrendingPlaces.ts",
+      "export": "getTrendingPlaces"
+    },
+    {
+      "id": "delete-account",
+      "name": "Delete Account",
+      "path": "dist/methods/src/deleteAccount.ts",
+      "export": "deleteAccount"
+    },
+    {
+      "id": "text-to-speech",
+      "name": "Text To Speech",
+      "path": "dist/methods/src/textToSpeech.ts",
+      "export": "textToSpeech"
+    },
+    {
+      "id": "send-friend-request",
+      "name": "Send Friend Request",
+      "path": "dist/methods/src/sendFriendRequest.ts",
+      "export": "sendFriendRequest"
+    },
+    {
+      "id": "respond-to-friend-request",
+      "name": "Respond To Friend Request",
+      "path": "dist/methods/src/respondToFriendRequest.ts",
+      "export": "respondToFriendRequest"
+    },
+    {
+      "id": "list-friend-requests",
+      "name": "List Friend Requests",
+      "path": "dist/methods/src/listFriendRequests.ts",
+      "export": "listFriendRequests"
+    },
+    {
+      "id": "search-trip-options-in-chat",
+      "name": "Search Trip Options In Chat",
+      "path": "dist/methods/src/searchTripOptionsInChat.ts",
+      "export": "searchTripOptionsInChat"
+    },
+    {
+      "id": "book-flight-from-chat",
+      "name": "Book Flight From Chat",
+      "path": "dist/methods/src/bookFlightFromChat.ts",
+      "export": "bookFlightFromChat"
     }
   ],
   "interfaces": [

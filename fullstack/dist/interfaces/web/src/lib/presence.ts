@@ -10,6 +10,16 @@ export function presenceVar(hex?: string | null): string {
   return i >= 0 ? `var(--presence-${i + 1})` : hex;
 }
 
+// Direct/group conversations (unlike trip collaborators) don't get a color
+// assigned server-side — hash the participant id into the same 6-color
+// presence palette instead, so it's stable across renders and reloads
+// without needing a database column for it.
+export function presenceColorForId(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return `var(--presence-${(hash % 6) + 1})`;
+}
+
 // Initials for an avatar: first letter of first + last name, else first letter
 // of the email. Uppercase. One name → one letter.
 export function initials(member: Pick<RosterMember, 'displayName' | 'email'>): string {

@@ -17,6 +17,7 @@ import {
   IconClockHour4,
   IconArrowUp,
   IconUsers,
+  IconArrowLeft,
 } from './icons';
 
 function useIsMobile(bp = 880) {
@@ -159,26 +160,32 @@ function TopBar({ minimal = false }: { minimal?: boolean }) {
   const toggleTheme = useStore((s) => s.toggleTheme);
   const trip = useStore((s) => s.trip);
   const newTrip = useStore((s) => s.newTrip);
+  const goHome = useStore((s) => s.goHome);
   const triggerDisruption = useStore((s) => s.triggerDisruption);
 
   return (
     <div className="titlebar no-select">
-      <div style={{ minWidth: 0, flex: 1 }}>
-        {trip && !minimal ? (
-          <>
-            <div className="font-display titlebar-name">{trip.title}</div>
-            <div className="titlebar-meta">
-              {[dateRange(trip.startDate, trip.endDate), `${trip.nodes.length} stop${trip.nodes.length === 1 ? '' : 's'}`]
-                .filter(Boolean)
-                .join(' · ')}
+      <div style={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button className="icon-btn" onClick={goHome} aria-label="Back to groups" title="Back to groups">
+          <IconArrowLeft size={18} />
+        </button>
+        <div style={{ minWidth: 0 }}>
+          {trip && !minimal ? (
+            <>
+              <div className="font-display titlebar-name">{trip.title}</div>
+              <div className="titlebar-meta">
+                {[dateRange(trip.startDate, trip.endDate), `${trip.nodes.length} stop${trip.nodes.length === 1 ? '' : 's'}`]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </div>
+            </>
+          ) : (
+            <div className="titlebar-brand">
+              <img src="/mascot/orb-idle.webp" alt="" width={26} height={26} style={{ objectFit: 'contain' }} />
+              Waypoint
             </div>
-          </>
-        ) : (
-          <div className="titlebar-brand">
-            <img src="/mascot/orb-idle.webp" alt="" width={26} height={26} style={{ objectFit: 'contain' }} />
-            Waypoint
-          </div>
-        )}
+          )}
+        </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {trip && !minimal && <Facepile />}

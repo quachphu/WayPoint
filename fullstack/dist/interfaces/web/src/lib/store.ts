@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from './api';
 import { voice, type VoiceState } from './voice';
+import { detectLocation } from './geo';
 import type {
   Trip,
   TripNode,
@@ -13,6 +14,12 @@ import type {
   NodeKind,
   RosterMember,
   InviteResult,
+  LocationScope,
+  NearbyUser,
+  ConversationSummary,
+  ConversationParticipant,
+  ConversationMessage,
+  FriendRequestSummary,
 } from './types';
 
 // A member is "present" if we heard from them within this window. The grace
@@ -23,6 +30,7 @@ export function isPresent(m: RosterMember): boolean {
 }
 
 let toastSeq = 0;
+let placesUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
 export interface Toast {
   id: number;
   kind: 'info' | 'success' | 'danger';
@@ -55,6 +63,10 @@ interface StoreState {
   // data
   loading: boolean;
   profile: User | null;
+  // 'home' is the groups dashboard shown right after sign-in; 'planning' is
+  // the chat + board view for one open trip; 'profile' is the editable
+  // account page.
+  view: 'home' | 'planning' | 'profile';
   trips: TripSummary[];
   activeTripId: string | null;
   trip: Trip | null;
@@ -83,6 +95,13 @@ interface StoreState {
   toasts: Toast[];
   // actions
   bootstrap: () => Promise<void>;
+  // Persists profile-edit fields and syncs the store's copy immediately so
+  // the rest of the app (People Nearby, gating in App.tsx) sees it right
+  // away. The onboarding flow deliberately does NOT use this — it calls
+  // api.updateProfile directly and holds off on syncing `profile` until its
+  // "getting to know you" animation finishes, via setProfile below.
+  saveProfile: (input: Parameters<typeof api.updateProfile>[0]) => Promise<User>;
+  setProfile: (u: User) => void;
   setTheme: (t: 'light' | 'dark') => void;
   toggleTheme: () => void;
   setVoiceState: (s: VoiceState) => void;
@@ -90,7 +109,13 @@ interface StoreState {
   selectNode: (id: string | null) => void;
   newTrip: () => void;
   switchTrip: (id: string) => Promise<void>;
-  send: (text: string, source: 'voice' | 'chat') => Promise<void>;
+  goHome: () => void;
+  openProfile: () => void;
+  openPlanning: (id: string) => Promise<void>;
+  openNewPlanning: () => void;
+  // Returns the agent's spoken reply so the Vocal Bridge query channel can
+  // voice it; the browser-speech path ignores the return value.
+  send: (text: string, source: 'voice' | 'chat') => Promise<string>;
   approve: (actionId: string) => Promise<void>;
   decline: (actionId: string) => Promise<void>;
   triggerDisruption: () => Promise<void>;
@@ -108,11 +133,49 @@ interface StoreState {
   removeMember: (collaboratorId: string) => Promise<void>;
   claimByToken: (token: string) => Promise<boolean>;
   pollSync: () => Promise<void>;
+  // People nearby + direct/group messaging
+  nearbyScope: LocationScope;
+  nearbyUsers: NearbyUser[];
+  nearbyLoading: boolean;
+  nearbyHasLocation: boolean;
+  setNearbyScope: (scope: LocationScope) => Promise<void>;
+  loadNearby: () => Promise<void>;
+  friendRequests: FriendRequestSummary[];
+  loadFriendRequests: () => Promise<void>;
+  sendFriendRequest: (toUserId: string) => Promise<void>;
+  respondToFriendRequest: (requestId: string, accept: boolean) => Promise<void>;
+  conversations: ConversationSummary[];
+  activeConversation: { id: string; type: 'direct' | 'group'; title: string | null; participants: ConversationParticipant[] } | null;
+  conversationMessages: ConversationMessage[];
+  conversationsPanelOpen: boolean;
+  toggleConversationsPanel: () => void;
+  loadConversations: () => Promise<void>;
+  openConversationWith: (userIds: string[], title?: string) => Promise<void>;
+  openConversationById: (id: string) => Promise<void>;
+  closeConversation: () => void;
+  sendConversationMessage: (text: string) => Promise<void>;
+  planTripInChat: (destination: string, originCity?: string) => Promise<void>;
+  bookFlightInChat: (messageId: string) => Promise<void>;
+  // Whether Waypoint is currently scouting trending places for the
+  // traveler's city — the mascot widget reacts to this globally, so it
+  // stays visible even if the map card itself is scrolled out of view.
+  placesScanning: boolean;
+  setPlacesScanning: (v: boolean) => void;
+  // A short-lived wrap-up line the mascot shows after every places check —
+  // "found N new spots" or "that's everything so far" — so the search
+  // feels acknowledged even when it turns up nothing new, not just silent.
+  placesUpdateMessage: string | null;
+  showPlacesUpdate: (message: string) => void;
+  // Called once the mascot actually finishes speaking the update (or
+  // immediately, if TTS wasn't available) — the bubble's visible time is
+  // driven by that, not a fixed guessed duration (see MascotWidget.tsx).
+  dismissPlacesUpdate: () => void;
 }
 
 export const useStore = create<StoreState>((set, get) => ({
   loading: true,
   profile: null,
+  view: 'home',
   trips: [],
   activeTripId: null,
   trip: null,
@@ -120,6 +183,17 @@ export const useStore = create<StoreState>((set, get) => ({
   pendingActions: [],
   roster: [],
   peopleOpen: false,
+  nearbyScope: 'city',
+  nearbyUsers: [],
+  nearbyLoading: false,
+  nearbyHasLocation: false,
+  friendRequests: [],
+  conversations: [],
+  activeConversation: null,
+  conversationMessages: [],
+  conversationsPanelOpen: false,
+  placesScanning: false,
+  placesUpdateMessage: null,
   inviteBusy: false,
   lastInvite: null,
   thinking: false,
@@ -142,6 +216,10 @@ export const useStore = create<StoreState>((set, get) => ({
         set({ loading: false, profile: null });
         return;
       }
+      // Signed in: arm the Vocal Bridge path. The token is only minted when
+      // the traveler first presses the orb, and voice falls back to browser
+      // speech if the integration isn't configured.
+      voice.configureVocalBridge(() => api.getVoiceToken());
       set({
         loading: false,
         profile: b.user ?? null,
@@ -152,11 +230,27 @@ export const useStore = create<StoreState>((set, get) => ({
         pendingActions: (b.pendingActions ?? []).filter((a) => a.status === 'pending'),
         roster: b.roster ?? [],
       });
+      // Fire-and-forget: refresh "where I am" every sign-in so people-nearby
+      // stays current. Never blocks the initial render on a slow/denied
+      // geolocation permission prompt.
+      detectLocation()
+        .then((loc) => {
+          if (!loc) return;
+          return api.setLocation(loc).then(({ user }) => set((s) => (s.profile ? { profile: { ...s.profile, location: user.location } } : {})));
+        })
+        .catch((err) => console.error('[geo] could not save location', err));
     } catch (err) {
       console.error('bootstrap failed', err);
       set({ loading: false });
     }
   },
+
+  saveProfile: async (input) => {
+    const { user } = await api.updateProfile(input);
+    set({ profile: user });
+    return user;
+  },
+  setProfile: (u) => set({ profile: u }),
 
   setTheme: (t) => {
     document.documentElement.setAttribute('data-theme', t);
@@ -171,15 +265,19 @@ export const useStore = create<StoreState>((set, get) => ({
 
   setVoiceState: (s) => set({ voiceState: s, micActive: s === 'listening' }),
   toggleMic: () => {
-    if (!voice.recognitionSupported) {
+    if (!voice.available) {
       get().pushToast('info', 'Voice needs a browser with a microphone. You can type instead.');
       return;
     }
     voice.toggleListening();
   },
 
-  // Selecting a node reclaims the docked slot from the People panel.
-  selectNode: (id) => set({ selectedNodeId: id, peopleOpen: id ? false : get().peopleOpen }),
+  // Selecting a node reclaims the docked slot from the People panel, and tells
+  // the voice agent what's in focus so the next spoken turn can reference it.
+  selectNode: (id) => {
+    if (id) voice.sendBoardSelection(id);
+    set({ selectedNodeId: id, peopleOpen: id ? false : get().peopleOpen });
+  },
 
   newTrip: () =>
     set({
@@ -213,9 +311,22 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  goHome: () => set({ view: 'home' }),
+  openProfile: () => set({ view: 'profile' }),
+
+  openPlanning: async (id) => {
+    await get().switchTrip(id);
+    set({ view: 'planning' });
+  },
+
+  openNewPlanning: () => {
+    get().newTrip();
+    set({ view: 'planning' });
+  },
+
   send: async (text, source) => {
     const trimmed = text.trim();
-    if (!trimmed || get().thinking) return;
+    if (!trimmed || get().thinking) return '';
     const { activeTripId, selectedNodeId } = get();
 
     // If a confirm-gate is open, a spoken/typed "yes" or "no" resolves it
@@ -228,11 +339,11 @@ export const useStore = create<StoreState>((set, get) => ({
       if (isAffirmative(trimmed)) {
         set((s) => ({ gatePress: { id: gate.id, seq: s.gatePress.seq + 1 } }));
         get().approve(gate.id);
-        return;
+        return 'On it.';
       }
       if (isNegative(trimmed)) {
         get().decline(gate.id);
-        return;
+        return "Okay, I won't.";
       }
     }
     // Optimistic user message
@@ -276,10 +387,12 @@ export const useStore = create<StoreState>((set, get) => ({
       }));
       get().refreshTripList(res.trip);
       if (source === 'voice') voice.speak(res.reply);
+      return res.reply;
     } catch (err: any) {
       console.error('converse failed', err);
       set({ thinking: false, streamingReply: null, status: '', ghosts: [] });
       get().pushToast('danger', "I hit a snag on that one. Mind trying again?");
+      return 'I hit a snag on that one. Mind trying again?';
     }
   },
 
@@ -539,6 +652,150 @@ export const useStore = create<StoreState>((set, get) => ({
       // Silent — a dropped poll is fine; the next one recovers.
     }
   },
+
+  setNearbyScope: async (scope) => {
+    set({ nearbyScope: scope });
+    await get().loadNearby();
+  },
+
+  loadNearby: async () => {
+    set({ nearbyLoading: true });
+    try {
+      const res = await api.listNearbyUsers({ scope: get().nearbyScope });
+      set({ nearbyUsers: res.users, nearbyHasLocation: res.hasLocation, nearbyLoading: false });
+    } catch (err) {
+      console.error('loadNearby failed', err);
+      set({ nearbyLoading: false });
+    }
+  },
+
+  loadFriendRequests: async () => {
+    try {
+      const res = await api.listFriendRequests();
+      set({ friendRequests: res.requests });
+    } catch (err) {
+      console.error('loadFriendRequests failed', err);
+    }
+  },
+
+  sendFriendRequest: async (toUserId) => {
+    try {
+      await api.sendFriendRequest({ toUserId });
+      await get().loadNearby();
+      get().pushToast('success', 'Friend request sent.');
+    } catch (err: any) {
+      console.error('sendFriendRequest failed', err);
+      get().pushToast('danger', err?.message || 'Could not send that request.');
+    }
+  },
+
+  respondToFriendRequest: async (requestId, accept) => {
+    try {
+      await api.respondToFriendRequest({ requestId, accept });
+      await Promise.all([get().loadNearby(), get().loadFriendRequests()]);
+      if (accept) get().pushToast('success', "You're now friends!");
+    } catch (err: any) {
+      console.error('respondToFriendRequest failed', err);
+      get().pushToast('danger', err?.message || 'Could not respond to that request.');
+    }
+  },
+
+  toggleConversationsPanel: () => {
+    const opening = !get().conversationsPanelOpen;
+    set({ conversationsPanelOpen: opening });
+    if (opening) get().loadConversations();
+  },
+
+  loadConversations: async () => {
+    try {
+      const res = await api.listConversations();
+      set({ conversations: res.conversations });
+    } catch (err) {
+      console.error('loadConversations failed', err);
+    }
+  },
+
+  openConversationWith: async (userIds, title) => {
+    try {
+      const { conversation } = await api.startConversation({ userIds, title });
+      await get().openConversationById(conversation.id);
+      await get().loadConversations();
+    } catch (err) {
+      console.error('openConversationWith failed', err);
+      get().pushToast('danger', 'Could not start that chat.');
+    }
+  },
+
+  openConversationById: async (id) => {
+    try {
+      const res = await api.getConversation({ conversationId: id });
+      set({ activeConversation: res.conversation, conversationMessages: res.messages, conversationsPanelOpen: true });
+    } catch (err) {
+      console.error('openConversationById failed', err);
+      get().pushToast('danger', 'Could not open that chat.');
+    }
+  },
+
+  closeConversation: () => set({ activeConversation: null, conversationMessages: [] }),
+
+  setPlacesScanning: (v) => set({ placesScanning: v }),
+
+  showPlacesUpdate: (message) => {
+    if (placesUpdateTimeout) clearTimeout(placesUpdateTimeout);
+    set({ placesUpdateMessage: message });
+    // Safety-net only — MascotWidget dismisses this itself once it actually
+    // finishes speaking the line, so this is just a cap in case that never
+    // fires (TTS hung, tab backgrounded, etc.), not the primary timer.
+    placesUpdateTimeout = setTimeout(() => set({ placesUpdateMessage: null }), 20000);
+  },
+
+  dismissPlacesUpdate: () => {
+    if (placesUpdateTimeout) clearTimeout(placesUpdateTimeout);
+    set({ placesUpdateMessage: null });
+  },
+
+  sendConversationMessage: async (text) => {
+    const trimmed = text.trim();
+    const conv = get().activeConversation;
+    if (!trimmed || !conv) return;
+    try {
+      const { message, suggestionMessage } = await api.sendDirectMessage({ conversationId: conv.id, text: trimmed });
+      set((s) => ({ conversationMessages: [...s.conversationMessages, message, ...(suggestionMessage ? [suggestionMessage] : [])] }));
+      get().loadConversations();
+    } catch (err) {
+      console.error('sendConversationMessage failed', err);
+      get().pushToast('danger', 'Message failed to send.');
+    }
+  },
+
+  // The mascot acting as a ticket agent, right in the social chat — everyone
+  // in the conversation sees the same option cards and ticket, since they're
+  // just more messages in the shared thread.
+  planTripInChat: async (destination, originCity) => {
+    const conv = get().activeConversation;
+    if (!conv) return;
+    try {
+      const { messages } = await api.searchTripOptionsInChat({ conversationId: conv.id, destination, originCity });
+      set((s) => ({ conversationMessages: [...s.conversationMessages, ...messages] }));
+      get().loadConversations();
+    } catch (err: any) {
+      console.error('planTripInChat failed', err);
+      get().pushToast('danger', err?.message || 'Could not look up flights for that trip.');
+    }
+  },
+
+  bookFlightInChat: async (messageId) => {
+    const conv = get().activeConversation;
+    if (!conv) return;
+    try {
+      const { message } = await api.bookFlightFromChat({ conversationId: conv.id, messageId });
+      set((s) => ({ conversationMessages: [...s.conversationMessages, message] }));
+      get().loadConversations();
+    } catch (err: any) {
+      console.error('bookFlightInChat failed', err);
+      get().pushToast('danger', err?.message || 'Could not book that flight.');
+    }
+  },
 }));
 
 function isAffirmative(t: string): boolean {
@@ -590,6 +847,9 @@ function bookedToast(action: PendingAction): string {
 // Wire the voice engine's callbacks into the store once.
 voice.onStateChange = (s) => useStore.getState().setVoiceState(s);
 voice.onResult = (text) => useStore.getState().send(text, 'voice');
+// Vocal Bridge hands each spoken query to the same converse pipeline chat
+// uses; the returned reply is voiced by the agent (docs/03 §2.5).
+voice.onQuery = (text) => useStore.getState().send(text, 'voice');
 
 export function selectNodeById(nodes: TripNode[], id: string | null): TripNode | null {
   if (!id) return null;

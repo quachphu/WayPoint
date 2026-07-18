@@ -1,0 +1,174 @@
+/* Tailwind utilities only — preflight (the base reset) is intentionally
+   omitted so it can't clobber the hand-written design system in index.css.
+   See https://tailwindcss.com/docs/preflight#disabling-preflight */
+@layer theme, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* Map the pasted component's font-* utilities onto Waypoint's own type scale
+   instead of pulling in new webfonts, so anything built with them stays on
+   brand automatically. */
+@theme {
+  --font-space: var(--font-system);
+  --font-inter: var(--font-system);
+  --font-instrument: var(--font-display);
+}
+
+/* Supporting utilities the pasted gradient-bar-hero-section component
+   references but doesn't define itself (animate-fadeIn, animation-delay-*,
+   and the pulseBar keyframe used inline on each bar). pulseBar animates
+   opacity rather than transform so it can't fight the bar's own inline
+   scaleY() — animating the same property from two sources would let
+   whichever applies last silently win and flatten the equalizer shape. */
+@layer utilities {
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-fadeIn {
+    animation: fadeIn 500ms ease-out both;
+  }
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+}
+
+@keyframes pulseBar {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Welcome hero ambient motion — several independent, perpetual loops (bars,
+   drifting light, mascot float) instead of one, so the page reads as "alive"
+   rather than a single fade-in. Every keyframe here only touches transform/
+   opacity so it stays GPU-composited. */
+
+/* Each bar oscillates around its own base height (--h, set inline), so the
+   equalizer silhouette keeps its shape while individual bars breathe in and
+   out like a real audio visualizer — fitting for a voice-first product. */
+@keyframes bar-wave {
+  0%,
+  100% {
+    transform: scaleY(calc(var(--h, 0.6) * 0.82));
+  }
+  50% {
+    transform: scaleY(calc(var(--h, 0.6) * 1.14));
+  }
+}
+
+@keyframes drift-a {
+  0% {
+    transform: translate(-8%, -6%) scale(1);
+  }
+  50% {
+    transform: translate(6%, 4%) scale(1.15);
+  }
+  100% {
+    transform: translate(-8%, -6%) scale(1);
+  }
+}
+@keyframes drift-b {
+  0% {
+    transform: translate(6%, 4%) scale(1.1);
+  }
+  50% {
+    transform: translate(-8%, -8%) scale(0.95);
+  }
+  100% {
+    transform: translate(6%, 4%) scale(1.1);
+  }
+}
+
+@keyframes mascot-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(1deg);
+  }
+}
+
+/* A noticeably livelier, faster wiggle for whenever the mascot is actively
+   doing something in the background (scouting places, etc.) — distinct from
+   the calm idle float so users can tell "busy" from "just breathing" at a
+   glance. */
+@keyframes mascot-search {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg) scale(1);
+  }
+  25% {
+    transform: translateY(-6px) rotate(3deg) scale(1.03);
+  }
+  50% {
+    transform: translateY(-2px) rotate(-3deg) scale(1);
+  }
+  75% {
+    transform: translateY(-8px) rotate(4deg) scale(1.03);
+  }
+}
+
+/* Three-dot "typing" indicator for the mascot's speech bubble while it's
+   searching — each dot staggered so they bounce in sequence. */
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* A light diagonal sweep across the CTA every few seconds — the "shimmer"
+   micro-interaction most polished startup landing pages put on their
+   primary button so it never sits completely still. */
+@keyframes cta-shine {
+  0% {
+    transform: translateX(-130%) skewX(-20deg);
+  }
+  35%,
+  100% {
+    transform: translateX(230%) skewX(-20deg);
+  }
+}
+
+/* Cheap film-grain flicker: a tiled noise texture jumping between a few
+   offsets. transform-only, so it's GPU-composited despite looking like a
+   per-pixel repaint. */
+@keyframes grain-flicker {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-2%, -4%);
+  }
+  40% {
+    transform: translate(3%, 1%);
+  }
+  60% {
+    transform: translate(-1%, 3%);
+  }
+  80% {
+    transform: translate(2%, -2%);
+  }
+}
