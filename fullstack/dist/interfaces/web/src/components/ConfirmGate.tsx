@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore, myCanApprove } from '../lib/store';
-import { moneyExact, weekdayShort, timeOfDay, dateRange } from '../lib/format';
+import { moneyExact, weekdayShort, timeOfDay, dateRange, durationLabel } from '../lib/format';
 import { shortName, presenceVar } from '../lib/presence';
 import { KindIcon, IconPhone, IconHourglassLow } from './icons';
 import type { PendingAction, NodeKind } from '../lib/types';
@@ -55,7 +55,11 @@ function buildView(a: PendingAction): GateView {
       title: `Book ${o.name || 'this hotel'}`,
       rows: [
         { l: 'Dates', v: dateRange(o.checkIn, o.checkOut) },
+        { l: 'Neighborhood', v: o.neighborhood },
+        { l: 'Rating', v: o.rating ? `${o.rating} / 5` : '' },
+        { l: 'Nightly', v: o.nightlyCents ? `${moneyExact(o.nightlyCents)} / night` : '' },
         { l: 'Nights', v: String(o.nights || '') },
+        { l: 'Cancellation', v: o.cancellable == null ? '' : o.cancellable ? 'Free cancellation' : 'Non-refundable' },
         { l: 'Total', v: moneyExact(o.totalCents) },
       ].filter((r) => r.v),
       note: null,
@@ -63,14 +67,18 @@ function buildView(a: PendingAction): GateView {
       affirm: 'Book it',
     };
   }
+  const stopsLabel = o.stops == null ? '' : o.stops === 0 ? 'Nonstop' : `${o.stops} stop${o.stops === 1 ? '' : 's'}`;
   return {
     eyebrow: 'Confirm booking',
     iconKind: 'flight',
     tileVoice: false,
     title: `Book ${o.carrier || ''} ${o.flightNumber || ''}`.trim() || 'Book this flight',
     rows: [
-      { l: 'Departs', v: o.departAt ? `${weekdayShort(o.departAt)}, ${timeOfDay(o.departAt)}` : '' },
       { l: 'Route', v: o.origin && o.destination ? `${o.origin} → ${o.destination}` : '' },
+      { l: 'Departs', v: o.departAt ? `${weekdayShort(o.departAt)}, ${timeOfDay(o.departAt)}` : '' },
+      { l: 'Arrives', v: o.arriveAt ? timeOfDay(o.arriveAt) : '' },
+      { l: 'Duration', v: [o.durationMin ? durationLabel(o.durationMin) : '', stopsLabel].filter(Boolean).join(' · ') },
+      { l: 'Cabin', v: [o.cabin, o.fareBrand].filter(Boolean).join(' · ') },
       { l: 'Fare', v: moneyExact(o.priceCents) },
     ].filter((r) => r.v),
     note: null,

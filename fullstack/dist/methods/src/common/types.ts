@@ -30,6 +30,13 @@ export interface TripNode {
   dependsOn: string[];
   detail?: Record<string, any>; // full offer/booking detail for the panel
   requestedBy?: RequestedBy | null; // set when a companion proposed this
+  // 1-based day of the trip this belongs to (Day 1, Day 2, ...), so the board
+  // can lay itself out as day-by-day swimlanes instead of one flat chain.
+  // Null means not yet scheduled to a specific day.
+  dayIndex?: number | null;
+  // Best-effort real photo (Wikimedia), hotel/activity cards only. Null when
+  // no confident match was found — the UI falls back to the kind icon.
+  imageUrl?: string | null;
 }
 
 export interface TripEdge {
@@ -39,6 +46,11 @@ export interface TripEdge {
   mode: EdgeMode;
   label: string; // "1h 15m flight", "20 min drive"
   state: 'default' | 'working';
+  // Real numbers from routing (OSRM) when available; absent for flight edges
+  // (those already carry an authoritative duration from the offer) or when a
+  // route couldn't be computed, in which case `label` still holds a sane guess.
+  durationMin?: number | null;
+  distanceKm?: number | null;
 }
 
 export type OfferSource = 'sabre' | 'simulated';

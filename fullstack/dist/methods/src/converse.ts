@@ -46,6 +46,18 @@ export async function converse(input: {
     await stream({ type: 'trip_created', trip });
   }
 
+  // Load the prior conversation BEFORE recording this turn, so the orchestrator
+  // has real memory of the back-and-forth (origin/dates/travelers it already
+  // asked about), not just the current sentence plus a board snapshot. The last
+  // dozen turns is plenty of context without bloating the prompt.
+  const priorMessages = created
+    ? []
+    : (await Messages.filter((m: Message) => m.tripId === trip.id))
+        .filter((m) => (m.role === 'user' || m.role === 'agent') && !!m.text)
+        .sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0))
+        .slice(-12)
+        .map((m) => ({ role: m.role as 'user' | 'agent', text: m.text }));
+
   // Stamp the author on the message so shared conversations attribute companions.
   await Messages.push({
     tripId: trip.id,
@@ -65,6 +77,7 @@ export async function converse(input: {
     source,
     focusNodeId: input.focusNodeId,
     requestedBy,
+    priorMessages,
   });
 
   await Messages.push({ tripId: trip.id, role: 'agent', text: reply, source: 'chat', status: 'complete' });

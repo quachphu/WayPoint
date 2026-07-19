@@ -266,7 +266,12 @@ export const useStore = create<StoreState>((set, get) => ({
   setVoiceState: (s) => set({ voiceState: s, micActive: s === 'listening' }),
   toggleMic: () => {
     if (!voice.available) {
-      get().pushToast('info', 'Voice needs a browser with a microphone. You can type instead.');
+      get().pushToast(
+        'info',
+        voice.unavailableReason === 'insecure'
+          ? 'Voice needs a secure page. Open Waypoint at http://localhost:5173 or over HTTPS — a raw http://<ip> URL blocks the mic. You can type instead.'
+          : 'Voice needs a browser with a microphone. You can type instead.',
+      );
       return;
     }
     voice.toggleListening();
@@ -367,12 +372,16 @@ export const useStore = create<StoreState>((set, get) => ({
           onStreamError: (err) => console.error('stream error', err),
         },
       );
-      // Finalize: agent message + authoritative trip
+      // Finalize: agent message + authoritative trip. The orchestrator should
+      // never hand back an empty reply, but an empty bubble (and, for voice,
+      // dead silence from speak('')) reads as "the app is broken" rather than
+      // "still working" — this is a last-resort backstop, not the real fix.
+      const replyText = res.reply || "I made some updates — take a look at the board and let me know what's next.";
       const agentMsg: Message = {
         id: `agent-${Date.now()}`,
         tripId: res.tripId,
         role: 'agent',
-        text: res.reply,
+        text: replyText,
         source: 'chat',
         status: 'complete',
       };
@@ -386,8 +395,8 @@ export const useStore = create<StoreState>((set, get) => ({
         activeTripId: res.tripId,
       }));
       get().refreshTripList(res.trip);
-      if (source === 'voice') voice.speak(res.reply);
-      return res.reply;
+      if (source === 'voice') voice.speak(replyText);
+      return replyText;
     } catch (err: any) {
       console.error('converse failed', err);
       set({ thinking: false, streamingReply: null, status: '', ghosts: [] });
@@ -787,6 +796,11 @@ export const useStore = create<StoreState>((set, get) => ({
   bookFlightInChat: async (messageId) => {
     const conv = get().activeConversation;
     if (!conv) return;
+    // Guard the in-flight window: the server rejects a re-book once it's ticketed,
+    // but two taps fired before the first response returns would both pass that
+    // check. Ignore a second tap on the same offer while one is still pending.
+    if (bookingInFlight.has(messageId)) return;
+    bookingInFlight.add(messageId);
     try {
       const { message } = await api.bookFlightFromChat({ conversationId: conv.id, messageId });
       set((s) => ({ conversationMessages: [...s.conversationMessages, message] }));
@@ -794,9 +808,16 @@ export const useStore = create<StoreState>((set, get) => ({
     } catch (err: any) {
       console.error('bookFlightInChat failed', err);
       get().pushToast('danger', err?.message || 'Could not book that flight.');
+    } finally {
+      bookingInFlight.delete(messageId);
     }
   },
 }));
+
+// Offer message ids with a book request currently in flight, so a rapid second
+// tap on the same "Book this flight" button can't double-submit before the
+// server's idempotency guard has recorded the ticket.
+const bookingInFlight = new Set<string>();
 
 function isAffirmative(t: string): boolean {
   return /^(yes|yeah|yep|yup|sure|ok|okay|do it|go ahead|sounds good|book it|confirm(ed)?|call( them| the airline)?|rebook( it)?|please do)\b/i.test(
@@ -848,8 +869,18 @@ function bookedToast(action: PendingAction): string {
 voice.onStateChange = (s) => useStore.getState().setVoiceState(s);
 voice.onResult = (text) => useStore.getState().send(text, 'voice');
 // Vocal Bridge hands each spoken query to the same converse pipeline chat
-// uses; the returned reply is voiced by the agent (docs/03 §2.5).
-voice.onQuery = (text) => useStore.getState().send(text, 'voice');
+// uses; the returned reply is voiced by the agent (docs/03 §2.5). Vocal Bridge
+// speaks the return value verbatim, so we must never hand it an empty string —
+// that produces dead air and the traveler thinks voice is broken. A clipped or
+// unheard utterance (empty query) gets a natural re-prompt, and a turn that
+// arrives while a previous one is still running gets a brief hold instead of
+// silence.
+voice.onQuery = async (text) => {
+  const q = text.trim();
+  if (!q) return "Sorry, I didn't catch that — where would you like to go?";
+  const reply = await useStore.getState().send(q, 'voice');
+  return reply || 'One moment — I’m still working on that.';
+};
 
 export function selectNodeById(nodes: TripNode[], id: string | null): TripNode | null {
   if (!id) return null;

@@ -22,7 +22,17 @@ curl --request POST \
 
 Response: `{"access_token": "...", "token_type": "bearer", "expires_in": 604800}`. Cache the token server-side (Redis, keyed by environment) and refresh proactively before expiry, never re-authenticate per request.
 
-**Certification vs production base URLs differ** (cert is typically an `api-crt` / `api.test` prefixed host, production is `api.platform.sabre.com` — confirm the exact cert hostname issued with your Dev Studio credentials, it's included in the account setup email, not hardcoded here since it's account-specific).
+**Certification vs production base URLs differ, and the cert hostname is genuinely inconsistent across accounts right now, not just an unconfirmed detail** — live sources from 2025-2026 show three different forms depending on account vintage and API family:
+
+| Form | Example | Where it shows up |
+|---|---|---|
+| `api.cert.platform.sabre.com` | `https://api.cert.platform.sabre.com/v5/offers/shop` | Current REST platform APIs (BFM v5, Booking Management) — try this first |
+| `api-crt.cert.havail.sabre.com` | `https://api-crt.cert.havail.sabre.com/v3/auth/token` | Older / some legacy-domain sandbox accounts |
+| `api.test.sabre.com` | `https://api.test.sabre.com/v2/auth/token` | Older quickstart guides and sample apps |
+
+Make this a `SABRE_BASE_URL` environment variable, not a hardcoded constant — confirm which one is live for your specific credentials from the Dev Studio account setup email before writing the client, and don't assume the first form is universal. See `docs/08_SPONSOR_DEEP_DIVE.md` §1.2 for how this was verified.
+
+**The Client ID itself is structured, not opaque**: `V1:<EPR>:<PCC or GROUP>:<DOMAIN>` (e.g. `V1:yourname:DEVCENTER:EXT` for a self-registered account). The PCC embedded in this string is the exact value that belongs in `POS.Source[].PseudoCityCode` below — get it from the Dev Studio "My Applications" page or the hackathon-issued credential email, don't guess it or leave it as a placeholder, this is the single most common Sabre integration blocker per current developer reports.
 
 ### 1.3 Flight search — Bargain Finder Max (BFM)
 
@@ -43,11 +53,11 @@ Response: `{"access_token": "...", "token_type": "bearer", "expires_in": 604800}
 }
 ```
 
-Returns up to 50 itineraries (per `RequestType.Name`) ranked by price by default, each with an `offerId` and a time-to-live. **Always revalidate the chosen offer immediately before booking** (a dedicated revalidation call), offers expire and re-pricing on stale data is the single most common source of booking failures in Sabre integrations, this is not optional error handling, it's a required step in the flow. Sabre's official Node.js sample app (`SabreDevStudio/bargain-finder-max-sample-nodejs` on GitHub) is a working, minimal reference for the full auth-to-parsed-results flow, point the coding agent at it directly if the JSON shape needs clarifying.
+Returns up to 50 itineraries (per `RequestType.Name`) ranked by price by default, each with an `offerId` and a time-to-live. **`TPA_Extensions.IntelliSellTransaction.RequestType.Name` (`"50ITINS"`, `"100ITINS"`, etc.) is the actual throttle on response size** — set it deliberately rather than accepting Sabre's default, larger responses cost more tokens once results are fed to an LLM for ranking. **Always revalidate the chosen offer immediately before booking** (a dedicated revalidation call), offers expire and re-pricing on stale data is the single most common source of booking failures in Sabre integrations, this is not optional error handling, it's a required step in the flow. Sabre's official Node.js sample app (`SabreDevStudio/bargain-finder-max-sample-nodejs` on GitHub) is a working, minimal reference for the full auth-to-parsed-results flow, point the coding agent at it directly if the JSON shape needs clarifying.
 
 ### 1.4 Hotel search — Content Services for Lodging
 
-`POST` to the Get Hotel Availability endpoint (`GetHotelAvail` / `v2`) for a geo or property search with rate plans. Official sample: `SabreDevStudio/get-hotel-avail-v2-sample-nodejs`. Request needs a stay date range, guest counts, and either a location or explicit hotel codes; response normalizes multi-source rate data (Sabre's own "normalization" layer) into one consistent structure regardless of the underlying supplier, which is genuinely useful, don't write custom per-supplier parsing.
+`POST` to the Get Hotel Availability endpoint (`GetHotelAvail` / `v2`) for a geo or property search with rate plans. Official sample: `SabreDevStudio/get-hotel-avail-v2-sample-nodejs`. Request needs a stay date range, guest counts, and either a location or explicit hotel codes; response normalizes multi-source rate data (Sabre's own "normalization" layer) into one consistent structure regardless of the underlying supplier, which is genuinely useful, don't write custom per-supplier parsing. The response also includes a top-level **`ShopKey`** meant for reuse on follow-up detail/booking calls in the same shopping session rather than re-shopping from scratch — worth wiring in even for the MVP.
 
 ### 1.5 Retrieving and modifying an existing booking (the disruption flow's first step)
 
@@ -59,9 +69,11 @@ Booking Management API, `POST /v1/trip/orders/getBooking` (or equivalent path fo
 
 This is exactly what the disruption agent calls first: given the trip's stored PNR, pull the current, authoritative state of the booking before deciding what to re-shop for. Servicing (changes, cancellations) goes through the same product family; expect to need a change-specific endpoint beyond simple retrieval, check the Booking Management API reference for the exact servicing operation your cert account has enabled.
 
-### 1.6 Agentic APIs and MCP server
+### 1.6 Agentic APIs and MCP server — checked, not currently self-serve
 
-Sabre has published an **MCP server** alongside "agentic-ready" REST APIs specifically so LLM agents can discover and call these tools without hand-written per-endpoint integration code, per Sabre's own description it acts as the orchestrator: agents discover available tools dynamically, understand how to structure requests, and parse responses, without the developer wiring each API by hand. Confirm whether it's available on your Dev Studio account before writing any raw REST client for BFM, hotel search, or booking management, wiring the orchestrator's tool layer directly to the MCP server is very likely less code and more reliable than hand-rolled HTTP clients for the same endpoints, this is worth checking first, not after building the REST clients.
+Sabre has publicly announced an **MCP server** alongside "agentic-ready" REST APIs, and Sabre's own press/product material (their "Agentic Blueprint" research piece, their investor press release, `sabre.com/developers/agency`) confirms the direction is real: agents discover available tools dynamically, understand how to structure requests, and parse responses, without the developer wiring each API by hand. **This has now been checked directly: as of today, it's positioned as a first-party enterprise capability exposed to existing Sabre platform customers, not a public, self-serve Dev Studio product with a registration flow or a URL you can request.** No public endpoint or onboarding path was found anywhere in Sabre's current developer hub or third-party MCP directories.
+
+**Don't spend build time chasing this.** Build the Sabre client as a normal REST wrapper against BFM, hotel search, and booking management (exactly the shape described in §1.3-1.5 below), and expose that wrapper as your own tool-calling surface to whatever agent framework you're using. This is what every current public Sabre sample app does, and it's not meaningfully more work than pursuing MCP access would be mid-build. See `docs/08_SPONSOR_DEEP_DIVE.md` §1.6 for the full research trail on this.
 
 ### 1.7 Rate/scale notes for the sandbox
 
@@ -155,6 +167,8 @@ vb.onAIAgentQuery(async (query) => {
   return answer; // spoken back to the user automatically
 });
 ```
+
+**For this project specifically, prefer the manual form over the automatic callback above.** The SDK also exposes a manual mode (confirmed from the SDK's own source): `vb.on('aiAgentQuery', async ({ query, turnId }) => { ...; vb.sendAIAgentResponse(turnId, answer); })`. The automatic callback only has one return value, but the manual mode lets the orchestrator call `vb.sendAction('board_update', diff)` for each board diff as it's produced and only call `sendAIAgentResponse` once the final reply is ready — which is what actually makes "the board builds live while the agent talks" (`docs/07_PLANNING_BOARD.md`) possible over the voice channel, not just over chat's own `stream()`. Use the automatic form only for a quick spike/smoke test, build the real integration on the manual form.
 
 ### 2.6 Outbound calling — the disruption agent's core tool
 

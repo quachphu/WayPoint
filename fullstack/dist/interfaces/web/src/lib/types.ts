@@ -27,6 +27,11 @@ export interface TripNode {
   dependsOn: string[];
   detail?: Record<string, any>;
   requestedBy?: RequestedBy | null;
+  // 1-based day of the trip (Day 1, Day 2, ...) driving the swimlane the node
+  // renders in. Null/absent = not yet scheduled to a specific day.
+  dayIndex?: number | null;
+  // Best-effort real photo (Wikimedia), hotel/activity only. Null = no match.
+  imageUrl?: string | null;
 }
 
 export interface TripEdge {
@@ -36,6 +41,8 @@ export interface TripEdge {
   mode: EdgeMode;
   label: string;
   state: 'default' | 'working';
+  durationMin?: number | null;
+  distanceKm?: number | null;
 }
 
 export type TripStatus = 'planning' | 'confirmed' | 'disrupted' | 'complete';
@@ -317,7 +324,10 @@ export interface InviteResult {
 // Connection credentials minted server-side for a Vocal Bridge voice session
 // (shape mirrors the SDK's TokenResponse).
 export interface VoiceToken {
-  url: string;
+  // The live token endpoint returns `livekit_url`; the SDK reads
+  // `url || livekit_url`, so either is accepted. Both optional to match reality.
+  url?: string;
+  livekit_url?: string;
   token: string;
   room_name: string;
   participant_identity: string;

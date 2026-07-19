@@ -24,9 +24,18 @@ export async function bookFlightFromChat(input: { conversationId: string; messag
     throw new Error('That flight option is no longer available.');
   }
 
+  // Idempotency: tapping "Book this flight" twice must not book twice. Once an
+  // offer message has produced a ticket, refuse further bookings of the same one.
+  if ((offerMessage as any).bookedRef) {
+    throw new Error('That flight is already booked.');
+  }
+
   const offer = offerMessage.flightOffer;
   const { bookingRef, costCents } = await bookFlight(offer);
   const booker = await Users.get(userId);
+
+  // Mark the source offer as booked so a second tap is rejected above.
+  await ConversationMessages.update(input.messageId, { bookedRef: bookingRef } as any);
 
   const text = `Booked! ${offer.carrier} ${offer.flightNumber} — ${moneyShort(costCents)}. Confirmation ${bookingRef}.`;
   const ticketMessage = await ConversationMessages.push({

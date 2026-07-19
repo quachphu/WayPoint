@@ -71,6 +71,7 @@ export const WaypointNode = memo(({ data }: any) => {
     >
       <Handle type="target" position={Position.Left} isConnectable={false} />
       <PresenceCluster nodeId={node.id} />
+      {node.imageUrl && <img className="wp-node__image" src={node.imageUrl} alt="" loading="lazy" />}
       {showStamp && (
         <img
           className={`wp-node__stamp${resolving ? ' pop' : ''}`}

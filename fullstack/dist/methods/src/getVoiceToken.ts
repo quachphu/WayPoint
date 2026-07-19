@@ -20,8 +20,17 @@ export async function getVoiceToken() {
     'X-API-Key': apiKey,
     'Content-Type': 'application/json',
   };
-  // Account-scoped keys must name the agent; agent-scoped keys don't.
-  if (process.env.VOCAL_BRIDGE_AGENT_ID) headers['X-Agent-Id'] = process.env.VOCAL_BRIDGE_AGENT_ID;
+  // Account-scoped keys must name the agent; agent-scoped keys don't. Our
+  // hackathon key is account-scoped, so a missing VOCAL_BRIDGE_AGENT_ID makes
+  // the endpoint 400 and voice silently falls back to browser speech.
+  if (process.env.VOCAL_BRIDGE_AGENT_ID) {
+    headers['X-Agent-Id'] = process.env.VOCAL_BRIDGE_AGENT_ID;
+  } else {
+    console.warn(
+      '[vocalbridge] VOCAL_BRIDGE_AGENT_ID not set — this fails for account-scoped keys. ' +
+        'Find the id via GET https://vocalbridgeai.com/api/v1/agents.',
+    );
+  }
 
   const user = await Users.get(userId);
   const res = await fetch('https://vocalbridgeai.com/api/v1/token', {
@@ -35,5 +44,9 @@ export async function getVoiceToken() {
     return { enabled: false as const };
   }
   const token = await res.json();
+  // Note: token.agent_mode reflects the voice transport (e.g. "openai_concierge"),
+  // NOT whether bring-your-own-agent delegation is on — that's the agent's
+  // separate "AI Agent Integration" setting (vb config set --ai-agent-enabled true).
+  // Voice → onAIAgentQuery → our orchestrator only fires when that is enabled.
   return { enabled: true as const, token };
 }

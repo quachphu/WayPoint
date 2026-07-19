@@ -19,7 +19,10 @@ export type VoiceState = 'idle' | 'ready' | 'listening' | 'speaking';
 type StateCb = (s: VoiceState) => void;
 type ResultCb = (text: string) => void;
 type QueryCb = (text: string) => Promise<string>;
-type TokenMint = () => Promise<{ enabled: boolean; token?: TokenResponse }>;
+// The live token endpoint returns `livekit_url` (the SDK's `url` is optional in
+// practice), so accept either and normalize before handing it to the SDK.
+type MintedToken = Omit<TokenResponse, 'url'> & { url?: string; livekit_url?: string };
+type TokenMint = () => Promise<{ enabled: boolean; token?: MintedToken }>;
 
 class VoiceEngine {
   private recognition: any = null;
@@ -30,6 +33,17 @@ class VoiceEngine {
   private mintToken: TokenMint | null = null;
   private vbDisabled = false; // set once the token endpoint or connect says no
   private speakTimer: number | null = null;
+  // True only when the traveler explicitly pressed the orb to mute — NOT
+  // while the SDK transiently mutes the mic during TTS playback to avoid
+  // echo. Only this flag should ever stop the mic from re-arming itself;
+  // otherwise every agent reply would leave the conversation dead until the
+  // traveler clicks again, defeating hands-free back-and-forth entirely.
+  private userMuted = false;
+  // Both Vocal Bridge (WebRTC getUserMedia) and the Web Speech fallback need a
+  // secure context — browsers block the mic on plain http://<lan-ip>. Served
+  // over http://localhost or https this is true; over a raw LAN IP it's false,
+  // which is the #1 reason "voice does nothing" on someone else's machine.
+  private secure = true;
   onStateChange: StateCb | null = null;
   onResult: ResultCb | null = null; // browser path: recognized text → store.send
   onQuery: QueryCb | null = null; // vocal bridge path: agent query → reply text
@@ -38,6 +52,7 @@ class VoiceEngine {
 
   constructor() {
     if (typeof window === 'undefined') return;
+    this.secure = window.isSecureContext !== false;
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     this.speechSupported = 'speechSynthesis' in window;
     this.synth = this.speechSupported ? window.speechSynthesis : null;
@@ -72,9 +87,19 @@ class VoiceEngine {
     this.mintToken = mint;
   }
 
-  // Whether pressing the orb can do anything at all.
+  // Whether pressing the orb can do anything at all. On an insecure origin the
+  // mic is blocked for every engine, so neither path can run.
   get available(): boolean {
+    if (!this.secure) return false;
     return this.recognitionSupported || (!this.vbDisabled && !!this.mintToken);
+  }
+
+  // Why the orb can't do anything, so the UI can give an actionable message
+  // instead of a generic "voice needs a mic".
+  get unavailableReason(): 'insecure' | 'unsupported' | null {
+    if (this.available) return null;
+    if (!this.secure) return 'insecure';
+    return 'unsupported';
   }
 
   private vbActive(): boolean {
@@ -103,7 +128,18 @@ class VoiceEngine {
     const ms = Math.min(9000, Math.max(1400, text.split(/\s+/).length * 340));
     this.speakTimer = window.setTimeout(() => {
       if (this.state !== 'speaking') return;
-      this.setState(this.vb?.isMicrophoneEnabled ? 'listening' : 'idle');
+      // Proactively re-arm the mic rather than only trusting the SDK's own
+      // isMicrophoneEnabled bookkeeping — some TTS playback paths mute the
+      // local track for echo cancellation without ever re-publishing it, which
+      // otherwise silently strands the session and forces a manual re-click
+      // for every single turn. A traveler-initiated mute is the only thing
+      // allowed to keep it off.
+      if (this.vbActive() && !this.userMuted) {
+        void this.vb!.setMicrophoneEnabled(true).catch((err) => console.error('[voice] mic re-arm failed:', err));
+        this.setState('listening');
+      } else {
+        this.setState(this.vb?.isMicrophoneEnabled ? 'listening' : 'idle');
+      }
     }, ms);
   }
 
@@ -115,7 +151,8 @@ class VoiceEngine {
             tokenProvider: async () => {
               const r = await this.mintToken!();
               if (!r.enabled || !r.token) throw new Error('Vocal Bridge not configured');
-              return r.token;
+              const t = r.token;
+              return { ...t, url: t.url ?? t.livekit_url ?? '' } as TokenResponse;
             },
           },
           participantName: 'Traveler',
@@ -177,8 +214,17 @@ class VoiceEngine {
   async startListening(): Promise<boolean> {
     // Stop any speech so the two never overlap.
     this.stopSpeaking();
+    if (!this.secure) {
+      console.error(
+        '[voice] microphone blocked: this page is not a secure context. ' +
+          'Open the app at http://localhost:5173 or over HTTPS (a raw http://<lan-ip> URL blocks the mic).',
+      );
+      return false;
+    }
+    this.userMuted = false;
     if (!this.vbDisabled && this.mintToken) {
       if (await this.startVocalBridge()) return true;
+      console.warn('[voice] Vocal Bridge did not start — using browser speech if available.');
     }
     if (!this.recognition) return false;
     try {
@@ -194,7 +240,10 @@ class VoiceEngine {
 
   stopListening() {
     if (this.vbActive()) {
-      // Stay connected for the session; just close the mic.
+      // Stay connected for the session; just close the mic. This is the one
+      // deliberate, traveler-initiated mute — it's the only thing that should
+      // stop the automatic re-arm in markSpeaking from turning the mic back on.
+      this.userMuted = true;
       void this.vb!.setMicrophoneEnabled(false);
       this.setState('idle');
       return;

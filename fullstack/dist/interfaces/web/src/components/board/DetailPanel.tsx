@@ -1,6 +1,6 @@
 import { useStore } from '../../lib/store';
 import { KindIcon, IconX } from '../icons';
-import { timeOfDay, weekdayShort, dateRange, moneyExact } from '../../lib/format';
+import { timeOfDay, weekdayShort, dateRange, moneyExact, durationLabel } from '../../lib/format';
 import { presenceVar } from '../../lib/presence';
 import type { TripNode } from '../../lib/types';
 
@@ -35,10 +35,18 @@ export function DetailPanel() {
   const chip = statusChip(node);
   const d = node.detail || {};
   const alternatives: any[] = d.alternatives || [];
+  const incomingEdge = trip?.edges.find((e) => e.to === node.id);
 
   return (
     <div className="detail-panel">
       <div key={node.id} className="detail-fade">
+      {node.imageUrl && (
+        <img
+          src={node.imageUrl}
+          alt=""
+          style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 'var(--r-lg)', marginBottom: 16 }}
+        />
+      )}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 20 }}>
         <div className="gate__tile" style={{ background: 'var(--surface-2)' }}>
           <KindIcon kind={node.kind} size={20} />
@@ -75,18 +83,24 @@ export function DetailPanel() {
       <div style={{ marginBottom: 8 }}>
         {node.kind === 'flight' && (
           <>
+            <Row label="Route" value={d.carrier ? node.title : null} />
             <Row label="Departs" value={node.start ? `${weekdayShort(node.start)}, ${timeOfDay(node.start)}` : null} />
             <Row label="Arrives" value={node.end ? timeOfDay(node.end) : null} />
             <Row label="Flight" value={d.carrier ? `${d.carrier} ${d.flightNumber || ''}` : node.subtitle} />
-            <Row label="Stops" value={d.stops != null ? (d.stops === 0 ? 'Nonstop' : `${d.stops} stop`) : null} />
+            <Row label="Duration" value={d.durationMin ? durationLabel(d.durationMin) : null} />
+            <Row label="Stops" value={d.stops != null ? (d.stops === 0 ? 'Nonstop' : `${d.stops} stop${d.stops === 1 ? '' : 's'}`) : null} />
+            <Row label="Cabin" value={[d.cabin, d.fareBrand].filter(Boolean).join(' · ') || null} />
           </>
         )}
         {node.kind === 'hotel' && (
           <>
             <Row label="Dates" value={dateRange(node.start, node.end)} />
             <Row label="Neighborhood" value={d.neighborhood} />
+            <Row label="Address" value={d.address} />
             <Row label="Rating" value={d.rating ? `${d.rating} / 5` : null} />
-            <Row label="Cancellable" value={d.cancellable == null ? null : d.cancellable ? 'Yes' : 'No'} />
+            <Row label="Nightly" value={d.nightlyCents != null ? `${moneyExact(d.nightlyCents)} / night` : null} />
+            <Row label="Nights" value={d.nights ? String(d.nights) : null} />
+            <Row label="Cancellation" value={d.cancellable == null ? null : d.cancellable ? 'Free cancellation' : 'Non-refundable'} />
           </>
         )}
         {node.kind === 'activity' && (
@@ -99,6 +113,16 @@ export function DetailPanel() {
         )}
         <Row label="Cost" value={node.costCents != null ? moneyExact(node.costCents) : null} />
         <Row label="Confirmation" value={node.bookingRef} />
+        {incomingEdge && node.kind !== 'flight' && (
+          <Row
+            label="Getting here"
+            value={
+              incomingEdge.distanceKm != null
+                ? `${incomingEdge.label} (${incomingEdge.distanceKm} km)`
+                : incomingEdge.label
+            }
+          />
+        )}
       </div>
 
       {node.status === 'disrupted' && alternatives.length > 0 && (

@@ -4,8 +4,9 @@ import { useStore } from '../../lib/store';
 import { buildFlow, NODE_W, NODE_H } from '../../lib/layout';
 import { WaypointNode } from './WaypointNode';
 import { GhostNode } from './GhostNode';
+import { DayLabelNode } from './DayLabelNode';
 
-const nodeTypes = { waypoint: WaypointNode, ghost: GhostNode };
+const nodeTypes = { waypoint: WaypointNode, ghost: GhostNode, dayLabel: DayLabelNode };
 
 function BoardInner({ vertical }: { vertical: boolean }) {
   const trip = useStore((s) => s.trip);
