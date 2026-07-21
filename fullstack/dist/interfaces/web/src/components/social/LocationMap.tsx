@@ -125,7 +125,8 @@ export function LocationMap() {
   const scanning = useStore((s) => s.placesScanning);
   const setScanning = useStore((s) => s.setPlacesScanning);
   const showPlacesUpdate = useStore((s) => s.showPlacesUpdate);
-  const [fullscreen, setFullscreen] = useState(false);
+  const fullscreen = useStore((s) => s.mapFullscreen);
+  const setFullscreen = useStore((s) => s.setMapFullscreen);
   const [places, setPlaces] = useState<TrendingPlace[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);

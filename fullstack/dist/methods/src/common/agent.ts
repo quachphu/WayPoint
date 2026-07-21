@@ -437,17 +437,22 @@ async function executeTool(
       }
 
       // Slot identity: what counts as "the same thing" for replace-vs-add.
-      // Flights key on the route (not the specific carrier/flight number) so
-      // switching from the Alaska option to the American one replaces the
-      // pick instead of stacking a second flight card for the same leg. A
-      // hotel slot is the trip's one stay. Activities dedupe by name+place —
-      // that part was never the bug, so it's unchanged.
+      // Flights key on origin only, not origin+destination — origin is what
+      // identifies which leg this is ("the outbound leg from home," "the
+      // return leg from Seattle"), and a multi-city trip naturally gives
+      // each leg a different origin, so this still keeps legs distinct
+      // without also requiring the destination to match. Requiring both
+      // previously meant that changing the leg's destination (e.g.
+      // switching the trip's base city from San Francisco to LA) fell
+      // through to "no match," silently orphaning the old flight instead of
+      // replacing it — the board ended up showing both the stale SFO flight
+      // and the new LAX one side by side. A hotel slot is the trip's one
+      // stay. Activities dedupe by name+place — that part was never the
+      // bug, so it's unchanged.
       const norm = (s?: string) => (s || '').trim().toLowerCase();
       let slotMatch: TripNode | undefined;
       if (kind === 'flight' && flightOffer) {
-        slotMatch = nodes.find(
-          (n) => n.kind === 'flight' && n.detail?.offer?.origin === flightOffer!.origin && n.detail?.offer?.destination === flightOffer!.destination,
-        );
+        slotMatch = nodes.find((n) => n.kind === 'flight' && n.detail?.offer?.origin === flightOffer!.origin);
       } else if (kind === 'hotel') {
         slotMatch = nodes.find((n) => n.kind === 'hotel');
       } else {

@@ -8,6 +8,13 @@ export interface GeoResult {
   city?: string;
   region?: string;
   country?: string;
+  // ISO 3166-1 alpha-2, from each provider's own code field — "people
+  // nearby" country matching keys off this, not the display name, because
+  // the three geocoders below disagree on wording for the same country
+  // ("United States" vs "United States of America" vs "USA"), which
+  // silently broke matching for anyone whose two visits used different
+  // providers.
+  countryCode?: string;
   lat?: number;
   lng?: number;
 }
@@ -26,7 +33,14 @@ async function reverseGeocode(lat: number, lng: number): Promise<GeoResult> {
   const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`);
   if (!res.ok) throw new Error(`reverse geocode failed: ${res.status}`);
   const d = await res.json();
-  return { city: d.city || d.locality || undefined, region: d.principalSubdivision || undefined, country: normalizeCountry(d.countryName), lat, lng };
+  return {
+    city: d.city || d.locality || undefined,
+    region: d.principalSubdivision || undefined,
+    country: normalizeCountry(d.countryName),
+    countryCode: d.countryCode || undefined,
+    lat,
+    lng,
+  };
 }
 
 async function ipGeolocatePrimary(): Promise<GeoResult> {
@@ -34,7 +48,14 @@ async function ipGeolocatePrimary(): Promise<GeoResult> {
   if (!res.ok) throw new Error(`ipapi.co failed: ${res.status}`);
   const d = await res.json();
   if (d.error) throw new Error(String(d.reason || 'ipapi.co error'));
-  return { city: d.city || undefined, region: d.region || undefined, country: normalizeCountry(d.country_name), lat: d.latitude, lng: d.longitude };
+  return {
+    city: d.city || undefined,
+    region: d.region || undefined,
+    country: normalizeCountry(d.country_name),
+    countryCode: d.country_code || undefined,
+    lat: d.latitude,
+    lng: d.longitude,
+  };
 }
 
 // Second IP-based fallback — ipapi.co is on some ad-blocker/privacy-extension
@@ -46,7 +67,14 @@ async function ipGeolocateSecondary(): Promise<GeoResult> {
   if (!res.ok) throw new Error(`ipwho.is failed: ${res.status}`);
   const d = await res.json();
   if (d.success === false) throw new Error(String(d.message || 'ipwho.is error'));
-  return { city: d.city || undefined, region: d.region || undefined, country: normalizeCountry(d.country), lat: d.latitude, lng: d.longitude };
+  return {
+    city: d.city || undefined,
+    region: d.region || undefined,
+    country: normalizeCountry(d.country),
+    countryCode: d.country_code || undefined,
+    lat: d.latitude,
+    lng: d.longitude,
+  };
 }
 
 function getCurrentPosition(): Promise<GeolocationPosition> {

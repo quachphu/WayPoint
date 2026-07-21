@@ -1,8 +1,7 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
 import { StickToBottom } from 'use-stick-to-bottom';
 import { useStore } from '../lib/store';
 import { VoiceOrb } from './VoiceOrb';
-import { IconArrowUp, IconMicrophone } from './icons';
+import { IconMicrophone } from './icons';
 import { initials, presenceVar } from '../lib/presence';
 import type { Message } from '../lib/types';
 
@@ -48,61 +47,25 @@ function Bubble({ m, myId }: { m: Message; myId: string | null }) {
 }
 
 function InputBar() {
-  const send = useStore((s) => s.send);
   const thinking = useStore((s) => s.thinking);
   const hasTrip = useStore((s) => !!s.activeTripId);
-  const [text, setText] = useState('');
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const voiceState = useStore((s) => s.voiceState);
 
-  const grow = () => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-  };
-
-  const submit = () => {
-    const t = text.trim();
-    if (!t || thinking) return;
-    setText('');
-    if (ref.current) ref.current.style.height = 'auto';
-    send(t, 'chat');
-  };
-
-  const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      submit();
-    }
-  };
+  const label =
+    voiceState === 'connecting'
+      ? 'Connecting…'
+      : thinking
+        ? 'Thinking…'
+        : hasTrip
+          ? 'Tap to talk to Waypoint'
+          : "Tap to talk — tell me where you're headed";
 
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, padding: 12, borderTop: '1px solid var(--border)' }}>
-      <textarea
-        ref={ref}
-        className="field"
-        rows={1}
-        value={text}
-        placeholder={hasTrip ? 'Message Waypoint…' : "Tell me where you're headed…"}
-        onChange={(e) => {
-          setText(e.target.value);
-          grow();
-        }}
-        onKeyDown={onKey}
-      />
-      {text.trim() ? (
-        <button
-          className="btn btn--primary"
-          onClick={submit}
-          disabled={thinking}
-          style={{ width: 44, height: 44, padding: 0, borderRadius: 'var(--r-sm)', flex: 'none' }}
-          aria-label="Send"
-        >
-          {thinking ? <span className="spinner" style={{ width: 18, height: 18 }} /> : <IconArrowUp size={20} />}
-        </button>
-      ) : (
-        <VoiceOrb size={44} />
-      )}
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 14, borderTop: '1px solid var(--border)' }}>
+      <VoiceOrb size={44} />
+      <span className="font-space" style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+        {label}
+      </span>
     </div>
   );
 }

@@ -6,13 +6,14 @@ import type { TripSummary } from '../lib/types';
 import { avatarForUser } from '../lib/onboardingOptions';
 import { PeopleNearby } from './social/PeopleNearby';
 import { LocationMap } from './social/LocationMap';
+import { Feed } from './social/Feed';
 
-// A believable, reliably-loading cover photo per trip — seeded by id so the
-// same trip always gets the same image, without depending on real per-
-// destination photography we don't have.
-function coverUrl(seed: string): string {
-  return `https://picsum.photos/seed/${encodeURIComponent(seed)}/1200/500`;
-}
+// One fixed cover photo for every trip card (public/banner.png) — a
+// picsum.photos seed was tried here before and just as often showed
+// something unrelated, like a cactus macro shot, on a trip with no cactus
+// in sight, so this trades per-destination photos for a single image
+// that's always on-brand instead.
+const COVER_PHOTO_URL = '/banner.png';
 
 function daysUntil(startDate: number | null): number | null {
   if (startDate == null) return null;
@@ -54,7 +55,7 @@ function HeroCard({ trip, memberCount, onOpen }: { trip: TripSummary; memberCoun
   return (
     <div className="relative w-full overflow-hidden rounded-2xl shadow-[var(--shadow-3)]">
       <img
-        src={coverUrl(trip.id)}
+        src={COVER_PHOTO_URL}
         alt=""
         className="absolute inset-0 h-full w-full object-cover"
         draggable={false}
@@ -96,7 +97,7 @@ function GroupCard({ trip, onOpen }: { trip: TripSummary; onOpen: () => void }) 
       className="group relative flex h-64 flex-col justify-end overflow-hidden rounded-xl border border-[var(--border-warm)] p-5 text-left shadow-[var(--shadow-1)] transition-transform duration-150 ease-out hover:-translate-y-0.5 active:scale-[0.98]"
     >
       <img
-        src={coverUrl(trip.id)}
+        src={COVER_PHOTO_URL}
         alt=""
         className="absolute inset-0 h-full w-full object-cover opacity-70 transition-opacity duration-150 group-hover:opacity-80"
         draggable={false}
@@ -119,6 +120,7 @@ export function Home() {
   const openPlanning = useStore((s) => s.openPlanning);
   const openNewPlanning = useStore((s) => s.openNewPlanning);
   const openProfile = useStore((s) => s.openProfile);
+  const mapFullscreen = useStore((s) => s.mapFullscreen);
 
   const now = Date.now();
   const upcoming = [...trips].filter((t) => t.startDate != null && t.startDate >= now).sort((a, b) => a.startDate! - b.startDate!);
@@ -129,7 +131,12 @@ export function Home() {
     <div className="h-full w-full overflow-y-auto" style={{ background: 'var(--canvas)' }}>
       <div className="mx-auto flex max-w-[min(1720px,94vw)] gap-8 px-6 py-8 sm:px-10 xl:gap-12 xl:px-16 xl:py-12">
         <aside className="hidden w-80 shrink-0 lg:block xl:w-96">
-          <div className="sticky top-8">
+          {/* `sticky` always creates its own CSS stacking context, which
+              would otherwise cap the fullscreen map's z-index to this
+              subtree and let the trip grid below paint over it regardless
+              of the z-index value — so drop sticky for the moment the map
+              is fullscreen (harmless: it fills the viewport either way). */}
+          <div className={mapFullscreen ? undefined : 'sticky top-8'}>
             <PeopleNearby />
             <LocationMap />
           </div>
@@ -154,16 +161,22 @@ export function Home() {
         {hero ? (
           <HeroCard trip={hero} memberCount={hero.id === activeTripId ? roster.length : null} onOpen={() => openPlanning(hero.id)} />
         ) : (
-          <div className="flex min-h-[50vh] flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--border-warm-strong)] p-10 text-center xl:min-h-[58vh]">
-            <img src="/mascot/orb-idle.webp" alt="" width={96} height={96} className="object-contain xl:h-[120px] xl:w-[120px]" draggable={false} />
-            <p className="font-space mt-6 max-w-sm text-base text-[var(--text-2)] xl:text-lg">No trips yet — start one and Waypoint will plan it with you.</p>
-            <button
-              onClick={openNewPlanning}
-              className="font-display mt-6 rounded-lg px-7 py-3.5 text-sm font-semibold text-white transition-transform duration-150 ease-out active:scale-[0.97] xl:text-base"
-              style={{ background: 'var(--live)' }}
-            >
-              Plan your first trip
-            </button>
+          <div className="relative flex min-h-[240px] flex-col justify-end overflow-hidden rounded-2xl p-8 shadow-[var(--shadow-3)] sm:p-10">
+            <img src={COVER_PHOTO_URL} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/55 to-black/15" />
+            <div className="relative">
+              <span className="font-space text-xs font-semibold uppercase tracking-wide text-white/60">No trips yet</span>
+              <h2 className="font-display mt-1.5 max-w-md text-2xl font-semibold leading-snug text-white sm:text-3xl">
+                Start planning and Waypoint will build it with you.
+              </h2>
+              <button
+                onClick={openNewPlanning}
+                className="font-display mt-6 inline-flex items-center gap-1.5 rounded-lg px-6 py-3 text-sm font-semibold text-white shadow-lg transition-transform duration-150 ease-out active:scale-[0.97]"
+                style={{ background: 'var(--live)' }}
+              >
+                Plan your first trip →
+              </button>
+            </div>
           </div>
         )}
 
@@ -186,6 +199,10 @@ export function Home() {
             )}
           </div>
         )}
+
+        <div className="mt-12">
+          <Feed />
+        </div>
         </div>
       </div>
     </div>

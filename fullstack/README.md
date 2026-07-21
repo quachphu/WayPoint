@@ -46,7 +46,8 @@ begin
     'trips', 'trip_events', 'call_sessions', 'trip_collaborators',
     'users', 'messages', 'pending_actions',
     'sessions', 'auth_accounts', 'meta',
-    'conversations', 'conversation_messages', 'city_places', 'friend_requests'
+    'conversations', 'conversation_messages', 'city_places', 'friend_requests',
+    'posts', 'post_comments'
   ]
   loop
     execute format(

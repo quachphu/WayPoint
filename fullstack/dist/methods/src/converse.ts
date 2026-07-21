@@ -1,8 +1,8 @@
 import { auth, stream } from '@mindstudio-ai/agent';
 import { Users } from './tables/users';
 import { Trips } from './tables/trips';
-import { Messages } from './tables/messages';
-import { extractTripMeta, createTripForUser } from './common/trips';
+import { Messages, type Message } from './tables/messages';
+import { extractTripMeta, createTripForUser, funnifyTripName } from './common/trips';
 import { assertTripAccess, requestedByFor } from './common/collaborators';
 import { runConversation } from './common/agent';
 
@@ -46,18 +46,6 @@ export async function converse(input: {
     await stream({ type: 'trip_created', trip });
   }
 
-  // Load the prior conversation BEFORE recording this turn, so the orchestrator
-  // has real memory of the back-and-forth (origin/dates/travelers it already
-  // asked about), not just the current sentence plus a board snapshot. The last
-  // dozen turns is plenty of context without bloating the prompt.
-  const priorMessages = created
-    ? []
-    : (await Messages.filter((m: Message) => m.tripId === trip.id))
-        .filter((m) => (m.role === 'user' || m.role === 'agent') && !!m.text)
-        .sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0))
-        .slice(-12)
-        .map((m) => ({ role: m.role as 'user' | 'agent', text: m.text }));
-
   // Stamp the author on the message so shared conversations attribute companions.
   await Messages.push({
     tripId: trip.id,
@@ -69,6 +57,58 @@ export async function converse(input: {
     authorName,
     authorColor,
   });
+
+  // A brand-new trip's very first reply is always the naming question, not
+  // planning — asked before anything else, per the traveler's own request,
+  // so every trip gets a real identity instead of a mechanical "X to Y Trip"
+  // auto-title before "people make a lot of trips" turns the trip list into
+  // a wall of look-alike names.
+  if (created) {
+    const reply = "Before we dive in — what should we call this trip?";
+    await Messages.push({ tripId: trip.id, role: 'agent', text: reply, source: 'chat', status: 'complete' });
+    const finalTrip = await Trips.get(trip.id);
+    return { tripId: trip.id, created, reply, version: finalTrip?.version ?? 0, trip: finalTrip };
+  }
+
+  // This turn is the traveler's answer to that naming question — take it as
+  // the name (not a planning instruction), fun it up with one emoji, and
+  // then pick planning back up using their original first message, so they
+  // never have to repeat themselves just because naming came first.
+  if (trip.namePending) {
+    const funName = await funnifyTripName(text, trip.destination);
+    await Trips.update(trip.id, { title: funName, namePending: false });
+
+    const firstUserMessage = (await Messages.filter((m: Message) => m.tripId === trip.id))
+      .filter((m) => m.role === 'user' && !!m.text)
+      .sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0))[0];
+    const originalRequest = firstUserMessage?.text || text;
+
+    const namedTrip = (await Trips.get(trip.id)) || trip;
+    const { reply: planningReply } = await runConversation({
+      trip: namedTrip,
+      user,
+      userText: originalRequest,
+      source,
+      focusNodeId: input.focusNodeId,
+      requestedBy,
+      priorMessages: [],
+    });
+
+    const reply = `${funName} it is!\n\n${planningReply}`;
+    await Messages.push({ tripId: trip.id, role: 'agent', text: reply, source: 'chat', status: 'complete' });
+    const finalTrip = await Trips.get(trip.id);
+    return { tripId: trip.id, created, reply, version: finalTrip?.version ?? 0, trip: finalTrip };
+  }
+
+  // Load the prior conversation BEFORE recording this turn, so the orchestrator
+  // has real memory of the back-and-forth (origin/dates/travelers it already
+  // asked about), not just the current sentence plus a board snapshot. The last
+  // dozen turns is plenty of context without bloating the prompt.
+  const priorMessages = (await Messages.filter((m: Message) => m.tripId === trip.id))
+    .filter((m) => (m.role === 'user' || m.role === 'agent') && !!m.text)
+    .sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0))
+    .slice(-12)
+    .map((m) => ({ role: m.role as 'user' | 'agent', text: m.text }));
 
   const { reply } = await runConversation({
     trip,

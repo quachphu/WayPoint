@@ -14,7 +14,12 @@
 
 import { VocalBridge, ConnectionState, type TokenResponse } from '@vocalbridgeai/sdk';
 
-export type VoiceState = 'idle' | 'ready' | 'listening' | 'speaking';
+// 'connecting' is distinct from 'ready' — 'ready' is the passive, pre-tap
+// "breathing" invite state (front door), while 'connecting' is what fires
+// the instant a tap starts a Vocal Bridge session, so there's always a
+// visible reaction to the tap instead of a beat where nothing on screen
+// changes and the orb reads as frozen.
+export type VoiceState = 'idle' | 'ready' | 'connecting' | 'listening' | 'speaking';
 
 type StateCb = (s: VoiceState) => void;
 type ResultCb = (text: string) => void;
@@ -33,6 +38,13 @@ class VoiceEngine {
   private mintToken: TokenMint | null = null;
   private vbDisabled = false; // set once the token endpoint or connect says no
   private speakTimer: number | null = null;
+  // Guards against two overlapping startVocalBridge() calls (e.g. the front-
+  // door orb and another voice trigger tapped close together) — without
+  // this, a second call could hit its own failure and null out `this.vb`
+  // while the first call was still `await`ing connect(), so the first call's
+  // very next line (`this.vb.setMicrophoneEnabled`) threw on a null `this.vb`
+  // even though its own connection had just succeeded.
+  private vbConnecting: Promise<boolean> | null = null;
   // True only when the traveler explicitly pressed the orb to mute — NOT
   // while the SDK transiently mutes the mic during TTS playback to avoid
   // echo. Only this flag should ever stop the mic from re-arming itself;
@@ -122,10 +134,18 @@ class VoiceEngine {
 
   // Vocal Bridge owns the audio; we approximate the orb's "speaking" beat from
   // agent transcript entries so the mascot perks up while the agent talks.
+  // The SDK exposes no "playback actually finished" event, so this is a
+  // rough estimate — it must err toward re-arming the mic too LATE, not too
+  // early. A 9s hard cap was cutting off any reply longer than ~26 words
+  // (e.g. a multi-part "what's your departure city, dates, travelers,
+  // budget?" question) mid-sentence: the mic reopened, picked up trailing
+  // TTS audio or silence as a "turn," and the agent moved on before the
+  // traveler ever got to answer — reported as "it skipped the date and
+  // went to the next question."
   private markSpeaking(text: string) {
     this.setState('speaking');
     if (this.speakTimer) window.clearTimeout(this.speakTimer);
-    const ms = Math.min(9000, Math.max(1400, text.split(/\s+/).length * 340));
+    const ms = Math.min(20000, Math.max(1400, text.split(/\s+/).length * 420));
     this.speakTimer = window.setTimeout(() => {
       if (this.state !== 'speaking') return;
       // Proactively re-arm the mic rather than only trusting the SDK's own
@@ -144,6 +164,16 @@ class VoiceEngine {
   }
 
   private async startVocalBridge(): Promise<boolean> {
+    if (this.vbConnecting) return this.vbConnecting;
+    this.vbConnecting = this.doStartVocalBridge();
+    try {
+      return await this.vbConnecting;
+    } finally {
+      this.vbConnecting = null;
+    }
+  }
+
+  private async doStartVocalBridge(): Promise<boolean> {
     try {
       if (!this.vb) {
         const vb = new VocalBridge({
@@ -159,7 +189,7 @@ class VoiceEngine {
         });
         vb.on('connectionStateChanged', (s) => {
           if (s === ConnectionState.Connecting || s === ConnectionState.WaitingForAgent) {
-            this.setState('ready');
+            this.setState('connecting');
           } else if (s === ConnectionState.Connected) {
             this.setState(vb.isMicrophoneEnabled ? 'listening' : 'idle');
           } else if (s === ConnectionState.Disconnected) {
@@ -180,11 +210,15 @@ class VoiceEngine {
         vb.onAIAgentQuery(async (q) => (this.onQuery ? await this.onQuery(q) : ''));
         this.vb = vb;
       }
-      if (this.vb.state === ConnectionState.Disconnected) {
-        this.setState('ready');
-        await this.vb.connect();
+      // Captured once and used for the rest of this call — reading `this.vb`
+      // again after the `await`s below would reflect whatever the *latest*
+      // call left it as, not necessarily this one's own instance.
+      const vb = this.vb;
+      if (vb.state === ConnectionState.Disconnected) {
+        this.setState('connecting');
+        await vb.connect();
       }
-      await this.vb.setMicrophoneEnabled(true);
+      await vb.setMicrophoneEnabled(true);
       this.setState('listening');
       return true;
     } catch (err) {
@@ -223,10 +257,19 @@ class VoiceEngine {
     }
     this.userMuted = false;
     if (!this.vbDisabled && this.mintToken) {
+      // Set synchronously, before any await, so the tap gets a visible
+      // reaction on the very same frame instead of waiting on the token
+      // mint + connect round trip.
+      this.setState('connecting');
       if (await this.startVocalBridge()) return true;
       console.warn('[voice] Vocal Bridge did not start — using browser speech if available.');
     }
-    if (!this.recognition) return false;
+    if (!this.recognition) {
+      // Neither path is available — don't leave the orb stuck showing
+      // "connecting" with nothing actually happening.
+      this.setState('idle');
+      return false;
+    }
     try {
       this.wantListening = true;
       this.recognition.start();

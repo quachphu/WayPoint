@@ -15,9 +15,9 @@ import {
   IconSun,
   IconChevronDown,
   IconClockHour4,
-  IconArrowUp,
   IconUsers,
   IconArrowLeft,
+  IconMicrophone,
 } from './icons';
 
 function useIsMobile(bp = 880) {
@@ -30,60 +30,24 @@ function useIsMobile(bp = 880) {
   return m;
 }
 
-const STARTERS = [
-  'Plan a weekend in San Francisco',
-  'Find me a flight to New York next Friday',
-  'Two nights in Seattle, I love good coffee',
-];
-
 function FrontDoor() {
-  const send = useStore((s) => s.send);
-  const [text, setText] = useState('');
-  const submit = (t: string) => {
-    const v = t.trim();
-    if (v) send(v, 'chat');
-  };
+  const voiceState = useStore((s) => s.voiceState);
+  const connecting = voiceState === 'connecting';
   return (
     <div className="frontdoor">
       <TopBar minimal />
       <div className="frontdoor-inner">
-        <VoiceOrb size={92} forceReady />
+        {/* The orb alone doesn't read as clickable — spell out that it's a
+            mic so it's unmistakable this is how you talk to Waypoint. */}
+        <div className="frontdoor-voice">
+          <VoiceOrb size={92} forceReady />
+          <span className="frontdoor-voice-hint">
+            <IconMicrophone size={13} />
+            {connecting ? 'Connecting…' : 'Tap to talk'}
+          </span>
+        </div>
         <h1 className="font-display frontdoor-title">Where are we headed?</h1>
-        <p className="frontdoor-sub">Say it or type it, I'll sort the rest.</p>
-        <div className="frontdoor-input">
-          <input
-            className="field"
-            style={{ height: 52, paddingRight: 52 }}
-            autoFocus
-            placeholder="Plan a weekend in…"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                submit(text);
-                setText('');
-              }
-            }}
-          />
-          <button
-            className="btn btn--primary"
-            style={{ position: 'absolute', right: 6, top: 6, width: 40, height: 40, padding: 0 }}
-            onClick={() => {
-              submit(text);
-              setText('');
-            }}
-            aria-label="Send"
-          >
-            <IconArrowUp size={20} />
-          </button>
-        </div>
-        <div className="frontdoor-starters">
-          {STARTERS.map((s) => (
-            <button key={s} className="starter-chip" onClick={() => submit(s)}>
-              {s}
-            </button>
-          ))}
-        </div>
+        <p className="frontdoor-sub">Tell me, out loud, and I'll sort the rest.</p>
       </div>
     </div>
   );

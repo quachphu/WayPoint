@@ -14,6 +14,11 @@ export interface Trip {
   nodes: TripNode[];
   edges: TripEdge[];
   version: number; // bumped on every re-fold
+  // True from creation until the traveler answers the agent's first
+  // question — what to call the trip. While true, converse.ts intercepts
+  // the next turn as the naming answer instead of routing it into the
+  // normal planning tool loop.
+  namePending?: boolean;
 }
 
 export const Trips = db.defineTable<Trip>('trips');

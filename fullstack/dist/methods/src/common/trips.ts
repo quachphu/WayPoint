@@ -59,9 +59,34 @@ export async function extractTripMeta(text: string): Promise<TripMeta> {
   }
 }
 
+// Turns whatever the traveler answered "what should we call this trip?"
+// with into a short, fun name carrying exactly one relevant emoji — so a
+// two-word throwaway answer ("Seattle trip", "idk you pick") still comes
+// back feeling like something worth naming a folder after, not a repeat of
+// the mechanical "X to Y Trip" auto-title. Falls back to the raw answer
+// (lightly title-cased, one generic emoji) if the model call fails, so
+// naming never blocks the trip from proceeding.
+export async function funnifyTripName(rawName: string, destination?: string): Promise<string> {
+  const cleaned = rawName.trim().slice(0, 120);
+  try {
+    const { content } = await mindstudio.generateText({
+      message: `A traveler was asked "what should we call this trip?" and answered: "${cleaned}"${destination ? ` (the trip is to ${destination})` : ''}. Turn that into a short, fun trip name (2-5 words) carrying exactly ONE relevant emoji. Keep any specific place/theme they mentioned. If their answer is a real, already-fun name, keep it close to what they said — just add the emoji and light polish, don't replace their idea. Return ONLY the name, no quotes, no commentary.`,
+      modelOverride: { model: 'gemini-3-flash', temperature: 0.8, maxResponseTokens: 60 },
+    } as any);
+    const name = (content || '').trim().replace(/^["']|["']$/g, '');
+    return name || cleaned;
+  } catch (err) {
+    console.error('[trips] funnifyTripName failed:', err);
+    return cleaned ? `${cleaned} ✨` : 'Our Trip ✨';
+  }
+}
+
 export async function createTripForUser(userId: string, meta: TripMeta) {
   const trip = await Trips.push({
     userId,
+    // The extracted title is a working fallback only — real board/UI use is
+    // fine with it in the meantime, but it gets replaced by a fun,
+    // traveler-approved name once they answer the naming question below.
     title: meta.title || 'New trip',
     destination: meta.destination || '',
     origin: meta.origin,
@@ -71,6 +96,7 @@ export async function createTripForUser(userId: string, meta: TripMeta) {
     nodes: [],
     edges: [],
     version: 0,
+    namePending: true,
   });
   await recordEvents(trip.id, userId, [
     { kind: 'trip_created', payload: { title: trip.title, destination: trip.destination } },

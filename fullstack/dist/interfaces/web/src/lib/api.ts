@@ -16,6 +16,9 @@ import type {
   ConversationMessage,
   TrendingPlace,
   FriendRequestSummary,
+  PostCategory,
+  FeedItem,
+  PostComment,
 } from './types';
 
 type Opts = InvokeOptions;
@@ -68,7 +71,14 @@ export const api = createClient<{
   setApproval(input: { tripId: string; collaboratorId: string; canApprove: boolean }): Promise<{ ok: boolean; roster: RosterMember[] }>;
   removeCollaborator(input: { tripId: string; collaboratorId: string }): Promise<{ ok: boolean; roster: RosterMember[] }>;
   // People nearby + direct/group messaging
-  setLocation(input: { city?: string; region?: string; country?: string; lat?: number; lng?: number }): Promise<{ user: User }>;
+  setLocation(input: {
+    city?: string;
+    region?: string;
+    country?: string;
+    countryCode?: string;
+    lat?: number;
+    lng?: number;
+  }): Promise<{ user: User }>;
   listNearbyUsers(input: { scope: LocationScope }): Promise<{ scope: LocationScope; hasLocation: boolean; users: NearbyUser[] }>;
   startConversation(input: { userIds: string[]; title?: string }): Promise<{ conversation: ConversationSummary }>;
   listConversations(): Promise<{ conversations: ConversationSummary[] }>;
@@ -82,6 +92,13 @@ export const api = createClient<{
   searchTripOptionsInChat(input: { conversationId: string; destination: string; originCity?: string }): Promise<{ messages: ConversationMessage[] }>;
   bookFlightFromChat(input: { conversationId: string; messageId: string }): Promise<{ message: ConversationMessage }>;
   getTrendingPlaces(input: { city?: string; region?: string; country?: string; lat: number; lng: number }): Promise<{ places: TrendingPlace[]; scanned: boolean; freshlyScanned?: boolean; added?: number }>;
+  // Social feed — posting photos/trip updates
+  createPost(input: { photoUrl: string; caption?: string; category: PostCategory }): Promise<{ post: FeedItem }>;
+  listFeed(input?: { scope?: LocationScope; category?: PostCategory; search?: string }): Promise<{ scope: LocationScope; hasLocation: boolean; items: FeedItem[] }>;
+  toggleLike(input: { postId: string }): Promise<{ liked: boolean; likeCount: number }>;
+  addComment(input: { postId: string; text: string }): Promise<{ comment: PostComment }>;
+  listComments(input: { postId: string }): Promise<{ comments: PostComment[] }>;
+  deletePost(input: { postId: string }): Promise<{ ok: boolean }>;
 }>();
 
 export { platform, auth, analytics };

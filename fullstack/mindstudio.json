@@ -51,6 +51,16 @@
       "name": "trip_collaborators",
       "path": "dist/methods/src/tables/tripCollaborators.ts",
       "export": "TripCollaborators"
+    },
+    {
+      "name": "posts",
+      "path": "dist/methods/src/tables/posts.ts",
+      "export": "Posts"
+    },
+    {
+      "name": "post_comments",
+      "path": "dist/methods/src/tables/postComments.ts",
+      "export": "PostComments"
     }
   ],
   "methods": [
@@ -233,6 +243,42 @@
       "name": "Book Flight From Chat",
       "path": "dist/methods/src/bookFlightFromChat.ts",
       "export": "bookFlightFromChat"
+    },
+    {
+      "id": "create-post",
+      "name": "Create Post",
+      "path": "dist/methods/src/createPost.ts",
+      "export": "createPost"
+    },
+    {
+      "id": "list-feed",
+      "name": "List Feed",
+      "path": "dist/methods/src/listFeed.ts",
+      "export": "listFeed"
+    },
+    {
+      "id": "toggle-like",
+      "name": "Toggle Like",
+      "path": "dist/methods/src/toggleLike.ts",
+      "export": "toggleLike"
+    },
+    {
+      "id": "add-comment",
+      "name": "Add Comment",
+      "path": "dist/methods/src/addComment.ts",
+      "export": "addComment"
+    },
+    {
+      "id": "list-comments",
+      "name": "List Comments",
+      "path": "dist/methods/src/listComments.ts",
+      "export": "listComments"
+    },
+    {
+      "id": "delete-post",
+      "name": "Delete Post",
+      "path": "dist/methods/src/deletePost.ts",
+      "export": "deletePost"
     }
   ],
   "interfaces": [

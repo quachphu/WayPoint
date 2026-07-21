@@ -66,6 +66,7 @@ export default function App() {
   const profile = useStore((s) => s.profile);
   const view = useStore((s) => s.view);
   const activeTripId = useStore((s) => s.activeTripId);
+  const trip = useStore((s) => s.trip);
   const pollSync = useStore((s) => s.pollSync);
   const claimByToken = useStore((s) => s.claimByToken);
 
@@ -143,13 +144,19 @@ export default function App() {
     );
   }
 
+  const atFrontDoor = view !== 'home' && view !== 'profile' && !activeTripId && !trip;
+
   return (
     <>
       {loading ? <ShellSkeleton /> : view === 'home' ? <Home /> : view === 'profile' ? <ProfilePage /> : <AppShell />}
       <ConfirmGate />
       <Toasts />
       <ChatDock />
-      <MascotWidget />
+      {/* The front door (planning view with no trip yet) already has its own
+          big, central voice orb for exactly this — a second "tap to talk"
+          mascot floating in the corner at the same time was a redundant,
+          confusing duplicate of the one thing this screen already does. */}
+      {!atFrontDoor && <MascotWidget />}
     </>
   );
 }

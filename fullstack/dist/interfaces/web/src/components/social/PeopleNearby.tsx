@@ -37,6 +37,22 @@ export function PeopleNearby() {
   useEffect(() => {
     loadNearby();
     loadFriendRequests();
+    // Neither call is polled anywhere else, so without this a pending
+    // request you sent stays stuck on "Sent" until something unrelated
+    // (a reload, a scope-tab click) happens to refetch — the other
+    // person accepting never pushes anything to your client on its own.
+    const tick = () => {
+      if (!document.hidden) {
+        loadNearby();
+        loadFriendRequests();
+      }
+    };
+    const id = window.setInterval(tick, 15000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

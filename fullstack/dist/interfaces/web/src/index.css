@@ -572,6 +572,26 @@ textarea {
 .orb[data-state='ready'] .orb__glow {
   opacity: 0.9;
 }
+/* connecting: a spinning ring the instant a tap starts a Vocal Bridge
+   session, so there's always an immediate, visible reaction to the tap
+   instead of a beat where nothing changes and the orb reads as frozen. */
+.orb[data-state='connecting'] .orb__face {
+  opacity: 0.65;
+}
+.orb[data-state='connecting'] .orb__glow {
+  opacity: 0.9;
+}
+.orb[data-state='connecting']::after {
+  content: '';
+  position: absolute;
+  inset: -6%;
+  z-index: 4;
+  border-radius: 50%;
+  border: 2.5px solid transparent;
+  border-top-color: var(--live);
+  border-right-color: var(--live);
+  animation: spin 0.7s linear infinite;
+}
 /* listening / speaking: halo ripples + perked mascot */
 .orb[data-state='listening'] .orb__glow,
 .orb[data-state='speaking'] .orb__glow {
@@ -1405,6 +1425,22 @@ textarea {
 }
 .frontdoor-inner > *:nth-child(5) {
   animation-delay: 320ms;
+}
+.frontdoor-voice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.frontdoor-voice-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
 }
 .frontdoor-title {
   font-size: clamp(30px, 5vw, 40px);

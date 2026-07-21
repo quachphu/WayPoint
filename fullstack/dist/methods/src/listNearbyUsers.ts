@@ -2,6 +2,7 @@ import { auth } from '@mindstudio-ai/agent';
 import { Users } from './tables/users';
 import { FriendRequests } from './tables/friendRequests';
 import { ageFromDob, isBirthdayToday, sharedInterestCount } from './common/profile';
+import { matchesScope } from './common/locationScope';
 
 // Facebook-style "people nearby" — other signed-up travelers who share the
 // caller's city, region (state/province), or country, depending on scope.
@@ -21,12 +22,7 @@ export async function listNearbyUsers(input: { scope: 'city' | 'region' | 'count
   if (!loc?.country) return { users: [], scope: input.scope, hasLocation: false };
 
   const all = await Users.filter((u) => u.id !== userId && !!u.location);
-  const matches = all.filter((u) => {
-    const l = u.location!;
-    if (input.scope === 'country') return l.country === loc.country;
-    if (input.scope === 'region') return l.country === loc.country && l.region === loc.region && !!loc.region;
-    return l.country === loc.country && l.region === loc.region && l.city === loc.city && !!loc.city;
-  });
+  const matches = all.filter((u) => matchesScope(u.location!, loc, input.scope));
 
   // One pass over my requests (either direction) instead of a query per person.
   const myRequests = await FriendRequests.filter((r) => r.fromUserId === userId || r.toUserId === userId);

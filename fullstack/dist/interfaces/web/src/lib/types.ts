@@ -145,6 +145,7 @@ export interface UserLocation {
   city?: string;
   region?: string;
   country?: string;
+  countryCode?: string;
   lat?: number;
   lng?: number;
   updatedAt: number;
@@ -275,6 +276,47 @@ export interface TrendingPlace {
   blurb: string;
   lat: number;
   lng: number;
+}
+
+export type PostCategory = 'cafe' | 'hangout' | 'events' | 'outdoors' | 'nightlife' | 'art_culture' | 'food';
+
+export interface PostLocation {
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  countryCode?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+}
+
+// A feed item is the post plus everything the viewer needs to render it —
+// author snapshot and viewer-relative like/comment state — same "enriched
+// view, not raw row" shape as NearbyUser.
+export interface FeedItem {
+  id: string;
+  userId: string;
+  photoUrl: string;
+  caption: string;
+  category: PostCategory;
+  location: PostLocation | null;
+  createdAt: number;
+  likeCount: number;
+  likedByMe: boolean;
+  commentCount: number;
+  authorName: string | null;
+  authorGender: Gender | null;
+  authorPhotoUrl: string | null;
+}
+
+export interface PostComment {
+  id: string;
+  postId: string;
+  userId: string;
+  text: string;
+  createdAt: number;
+  authorName: string | null;
+  authorGender: Gender | null;
+  authorPhotoUrl: string | null;
 }
 
 export interface TripBundle {

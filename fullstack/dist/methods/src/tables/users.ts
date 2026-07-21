@@ -24,6 +24,12 @@ export interface User {
     city?: string;
     region?: string; // state/province
     country?: string;
+    // ISO 3166-1 alpha-2, from the geocoder's own code field — "people
+    // nearby" country matching keys off this, not the display name, since
+    // different providers phrase the same country differently ("United
+    // States" vs "United States of America"), which silently broke
+    // matching between two people in the same country.
+    countryCode?: string;
     lat?: number;
     lng?: number;
     updatedAt: number;

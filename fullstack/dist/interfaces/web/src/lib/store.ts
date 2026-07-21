@@ -161,6 +161,14 @@ interface StoreState {
   // stays visible even if the map card itself is scrolled out of view.
   placesScanning: boolean;
   setPlacesScanning: (v: boolean) => void;
+  // Whether the location map card is expanded fullscreen — lifted up here
+  // (rather than local state inside LocationMap) so Home can drop the
+  // `sticky` class off the map's ancestor while fullscreen. `sticky`
+  // always creates its own CSS stacking context, which otherwise caps the
+  // fullscreen map's z-index to that subtree and lets later page content
+  // paint over it regardless of the z-index value.
+  mapFullscreen: boolean;
+  setMapFullscreen: (v: boolean) => void;
   // A short-lived wrap-up line the mascot shows after every places check —
   // "found N new spots" or "that's everything so far" — so the search
   // feels acknowledged even when it turns up nothing new, not just silent.
@@ -193,6 +201,7 @@ export const useStore = create<StoreState>((set, get) => ({
   conversationMessages: [],
   conversationsPanelOpen: false,
   placesScanning: false,
+  mapFullscreen: false,
   placesUpdateMessage: null,
   inviteBusy: false,
   lastInvite: null,
@@ -230,15 +239,24 @@ export const useStore = create<StoreState>((set, get) => ({
         pendingActions: (b.pendingActions ?? []).filter((a) => a.status === 'pending'),
         roster: b.roster ?? [],
       });
-      // Fire-and-forget: refresh "where I am" every sign-in so people-nearby
-      // stays current. Never blocks the initial render on a slow/denied
-      // geolocation permission prompt.
-      detectLocation()
-        .then((loc) => {
-          if (!loc) return;
-          return api.setLocation(loc).then(({ user }) => set((s) => (s.profile ? { profile: { ...s.profile, location: user.location } } : {})));
-        })
-        .catch((err) => console.error('[geo] could not save location', err));
+      // Fire-and-forget: refresh "where I am" so people-nearby stays current
+      // for anyone who's actually traveled since last time — but only when
+      // the saved location is stale enough that it's worth re-asking. A
+      // saved location less than LOCATION_REFRESH_MS old just re-triggers
+      // the browser's geolocation prompt on every single sign-in/reload for
+      // no reason, which reads as the app "not trusting" a location it
+      // already has. Never blocks the initial render on a slow/denied
+      // geolocation permission prompt either way.
+      const LOCATION_REFRESH_MS = 6 * 60 * 60 * 1000; // 6 hours
+      const savedAt = b.user?.location?.updatedAt;
+      if (!savedAt || Date.now() - savedAt > LOCATION_REFRESH_MS) {
+        detectLocation()
+          .then((loc) => {
+            if (!loc) return;
+            return api.setLocation(loc).then(({ user }) => set((s) => (s.profile ? { profile: { ...s.profile, location: user.location } } : {})));
+          })
+          .catch((err) => console.error('[geo] could not save location', err));
+      }
     } catch (err) {
       console.error('bootstrap failed', err);
       set({ loading: false });
@@ -269,8 +287,8 @@ export const useStore = create<StoreState>((set, get) => ({
       get().pushToast(
         'info',
         voice.unavailableReason === 'insecure'
-          ? 'Voice needs a secure page. Open Waypoint at http://localhost:5173 or over HTTPS — a raw http://<ip> URL blocks the mic. You can type instead.'
-          : 'Voice needs a browser with a microphone. You can type instead.',
+          ? 'Voice needs a secure page. Open Waypoint at http://localhost:5173 or over HTTPS — a raw http://<ip> URL blocks the mic.'
+          : 'Voice needs a browser with a microphone to talk to Waypoint.',
       );
       return;
     }
@@ -668,9 +686,21 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   loadNearby: async () => {
+    const prevUsers = get().nearbyUsers;
     set({ nearbyLoading: true });
     try {
       const res = await api.listNearbyUsers({ scope: get().nearbyScope });
+      // The accepter's own client already gets a "you're now friends!"
+      // toast (see respondToFriendRequest below), but that update never
+      // reaches the requester — nothing else here polls, so this refresh
+      // is the only place we can catch the pending -> friends transition
+      // and let the requester know their request actually landed.
+      for (const u of res.users) {
+        const prev = prevUsers.find((p) => p.id === u.id);
+        if (u.friendStatus === 'friends' && prev?.friendStatus === 'pending_outgoing') {
+          get().pushToast('success', `${u.displayName || 'A fellow traveler'} accepted your friend request!`);
+        }
+      }
       set({ nearbyUsers: res.users, nearbyHasLocation: res.hasLocation, nearbyLoading: false });
     } catch (err) {
       console.error('loadNearby failed', err);
@@ -748,6 +778,8 @@ export const useStore = create<StoreState>((set, get) => ({
   closeConversation: () => set({ activeConversation: null, conversationMessages: [] }),
 
   setPlacesScanning: (v) => set({ placesScanning: v }),
+
+  setMapFullscreen: (v) => set({ mapFullscreen: v }),
 
   showPlacesUpdate: (message) => {
     if (placesUpdateTimeout) clearTimeout(placesUpdateTimeout);
@@ -875,11 +907,28 @@ voice.onResult = (text) => useStore.getState().send(text, 'voice');
 // unheard utterance (empty query) gets a natural re-prompt, and a turn that
 // arrives while a previous one is still running gets a brief hold instead of
 // silence.
+// The SDK's onAIAgentQuery gives us no turn id, so a redelivered/retried
+// query (e.g. a brief Vocal Bridge reconnect) is indistinguishable from a
+// genuinely new one at this layer — reprocessing it duplicated both the
+// traveler's line and the agent's reply in the transcript. The same exact
+// text arriving again within a few seconds is treated as a redelivery and
+// gets the same in-flight/just-finished reply instead of re-running the
+// whole pipeline (and re-touching the board) a second time.
+const VOICE_DEDUP_WINDOW_MS = 4000;
+let lastVoiceQuery: { text: string; at: number; replyPromise: Promise<string> } | null = null;
+
 voice.onQuery = async (text) => {
   const q = text.trim();
   if (!q) return "Sorry, I didn't catch that — where would you like to go?";
-  const reply = await useStore.getState().send(q, 'voice');
-  return reply || 'One moment — I’m still working on that.';
+  if (lastVoiceQuery && lastVoiceQuery.text === q && Date.now() - lastVoiceQuery.at < VOICE_DEDUP_WINDOW_MS) {
+    return lastVoiceQuery.replyPromise;
+  }
+  const replyPromise = useStore
+    .getState()
+    .send(q, 'voice')
+    .then((reply) => reply || 'One moment — I’m still working on that.');
+  lastVoiceQuery = { text: q, at: Date.now(), replyPromise };
+  return replyPromise;
 };
 
 export function selectNodeById(nodes: TripNode[], id: string | null): TripNode | null {

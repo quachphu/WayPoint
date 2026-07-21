@@ -171,7 +171,7 @@ export async function searchHotels(
     return { offers, source: 'sabre' };
   } catch (err: any) {
     console.error('[sabre] hotel search fell back to simulated:', err?.message || err);
-    return { offers: simulateHotels(params), source: 'simulated' };
+    return { offers: await simulateHotels(params), source: 'simulated' };
   }
 }
 

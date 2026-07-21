@@ -34,6 +34,9 @@ import {
   IconMinimize,
   IconCamera,
   IconLock,
+  IconHeart,
+  IconHeartFilled,
+  IconSearch,
 } from '@tabler/icons-react';
 import type { NodeKind } from '../lib/types';
 
@@ -87,4 +90,7 @@ export {
   IconMinimize,
   IconCamera,
   IconLock,
+  IconHeart,
+  IconHeartFilled,
+  IconSearch,
 };
