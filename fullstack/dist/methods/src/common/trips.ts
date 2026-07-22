@@ -5,6 +5,7 @@ import { PendingActions } from '../tables/pendingActions';
 import { CallSessions } from '../tables/callSessions';
 import { recordEvents } from './tripState';
 import { ensureOwnerRow, buildRoster } from './collaborators';
+import { activeExpensesForTrip } from './expenses';
 
 function safeParse(text: string): any | null {
   try {
@@ -56,6 +57,34 @@ export async function extractTripMeta(text: string): Promise<TripMeta> {
   } catch (err) {
     console.error('[trips] extractTripMeta failed:', err);
     return { title: 'New trip', destination: '', origin: undefined, startDate: null, endDate: null };
+  }
+}
+
+// Mid-conversation on one trip, the traveler names a clearly different
+// destination — "plan a Spain trip for Feb 10-20..." while inside a Seattle
+// trip's chat. Without this check, converse.ts hands that straight to the
+// orchestrator INSIDE the open trip's context, and the model (reasonably,
+// given no guidance either way) tends to ask "are we switching?" instead of
+// just doing it — confusing, since the traveler never touched "new trip."
+// Defaults to false (stay on the current trip) on any failure or ambiguity —
+// never surprise-create a trip on a flaky classification call.
+export async function isDifferentTripRequest(text: string, currentTrip: { title: string; destination: string }): Promise<boolean> {
+  if (!currentTrip.destination || text.trim().length < 15) return false;
+  try {
+    const { content } = await mindstudio.generateText({
+      message: `The traveler is mid-conversation about a trip to ${currentTrip.destination} ("${currentTrip.title}"). They just said: "${text}"
+
+Does this describe planning a DIFFERENT, separate trip — a different destination, clearly not about modifying, continuing, or asking about the ${currentTrip.destination} trip? Say false if it's about continuing/adjusting the ${currentTrip.destination} trip, if it's ambiguous, or if no specific different destination is actually named.
+
+Return JSON {"differentTrip": boolean}.`,
+      modelOverride: { model: 'gemini-3-flash', temperature: 0, maxResponseTokens: 100 },
+      structuredOutputType: 'json',
+      structuredOutputExample: '{"differentTrip":false}',
+    } as any);
+    return !!safeParse(content)?.differentTrip;
+  } catch (err) {
+    console.error('[trips] isDifferentTripRequest failed:', err);
+    return false;
   }
 }
 
@@ -129,5 +158,11 @@ export async function getTripBundle(tripId: string) {
     CallSessions.filter((c, $) => c.tripId === $.tripId, { tripId }).sortBy((c) => c.created_at), // bindings: lifts closure var so filter compiles to SQL
   );
   const activeCall = calls.length ? calls[calls.length - 1] : null;
-  return { trip, messages, pendingActions, activeCall };
+  // Kept out of the batch above: trip_expenses is a newer table that may not
+  // exist yet on a project that hasn't re-run the README's storage setup
+  // SQL, and activeExpensesForTrip is already self-defensive about that —
+  // a missing table here must never take down the rest of an otherwise-
+  // healthy trip bundle the way a single failed Promise.all member would.
+  const expenses = await activeExpensesForTrip(tripId);
+  return { trip, messages, pendingActions, activeCall, expenses };
 }

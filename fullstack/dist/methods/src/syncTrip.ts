@@ -56,5 +56,6 @@ export async function syncTrip(input: {
     messages: bundle.messages,
     pendingActions: bundle.pendingActions,
     activeCall: bundle.activeCall,
+    expenses: bundle.expenses,
   };
 }

@@ -32,7 +32,6 @@ export function PeopleNearby() {
   const loadFriendRequests = useStore((s) => s.loadFriendRequests);
   const sendFriendRequest = useStore((s) => s.sendFriendRequest);
   const respondToFriendRequest = useStore((s) => s.respondToFriendRequest);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadNearby();
@@ -55,14 +54,6 @@ export function PeopleNearby() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const toggleSelected = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
 
   return (
     <div className="rounded-2xl border border-[var(--border-warm)] p-5" style={{ background: 'var(--surface)' }}>
@@ -109,7 +100,7 @@ export function PeopleNearby() {
           <button
             key={s.value}
             onClick={() => setScope(s.value)}
-            className="font-space flex-1 rounded-md py-1.5 text-xs font-medium transition-colors duration-150"
+            className="font-space flex-1 rounded-md py-1.5 text-xs font-medium transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.96]"
             style={
               scope === s.value
                 ? { background: 'var(--live)', color: 'var(--on-accent)' }
@@ -132,21 +123,8 @@ export function PeopleNearby() {
 
       <div className="flex flex-col gap-1">
         {users.map((u) => {
-          const isFriend = u.friendStatus === 'friends';
           return (
             <div key={u.id} className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors duration-150 hover:bg-[var(--surface-2)]">
-              {/* Only friends can be picked into a group chat — showing this
-                  for everyone (regardless of whether messaging them is even
-                  possible yet) was the "checkbox that does nothing" bug. */}
-              {isFriend && (
-                <input
-                  type="checkbox"
-                  checked={selected.has(u.id)}
-                  onChange={() => toggleSelected(u.id)}
-                  className="h-4 w-4 shrink-0 accent-[var(--live)]"
-                  aria-label={`Select ${friendlyName(u)}`}
-                />
-              )}
               <img
                 src={avatarForUser(u)}
                 alt=""
@@ -218,19 +196,6 @@ export function PeopleNearby() {
           );
         })}
       </div>
-
-      {selected.size >= 2 && (
-        <button
-          onClick={() => {
-            openConversationWith([...selected]);
-            setSelected(new Set());
-          }}
-          className="font-display mt-4 w-full rounded-lg py-2.5 text-sm font-semibold text-white transition-transform duration-150 ease-out active:scale-[0.97]"
-          style={{ background: 'var(--live)' }}
-        >
-          Start group chat ({selected.size})
-        </button>
-      )}
     </div>
   );
 }

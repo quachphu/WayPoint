@@ -7,6 +7,7 @@ import { searchFlights, searchHotels, revalidateFlight } from './sabre';
 import { rankFlights, rankHotels } from './rank';
 import { makeFlightNode, makeHotelNode, makeActivityNode, makeEdge, computeDayIndex } from './board';
 import { runDisruption } from './disruption';
+import { adjustSplit } from './expenses';
 import { lookupImage } from './images';
 import { moneyShort, weekdayShort, timeOfDay, durationLabel, dateRange, monthDay } from './format';
 import type { FlightOffer, HotelOffer, ToolCall, RequestedBy, TripNode } from './types';
@@ -119,12 +120,12 @@ You run a tool loop. Each turn you return ONE JSON object choosing exactly one a
 
 Intake first, like a real trip planner. Before you search flights or hotels, make sure you know the essentials:
 1. Departure city or airport (if the traveler's home airport is known from their profile or the trip, use it and do not ask).
-2. Dates or trip length (if the trip already has dates, use them).
+2. Dates: you need BOTH when they leave (outbound date) AND when they come back (return date) — two separate facts, never assume one from the other. If one is missing, ask specifically for it ("And when are you headed back?") rather than guessing or defaulting to a same-day return. A same-day arrival-and-departure is almost never what's meant when a multi-night hotel stay is also on the board — if the dates you're about to act on would mean landing and leaving the same calendar day while a hotel stay exists, say so plainly and ask them to confirm or correct it instead of silently building a same-day round trip.
 3. Number of travelers, and who (solo, couple, friends, family).
 4. A sense of budget and vibe (price sensitivity, and interests like food, nightlife, outdoors, culture).
 Read the conversation log and trip context first — never re-ask something you were already told or that is already on the board. If an essential is missing, ask exactly ONE short question via "final" and stop for that turn. Ask only what you still need; once you have enough to be genuinely useful, act. Do not interrogate — at most a couple of quick questions before you start showing options.
 
-Once flights and a hotel are settled, KEEP GOING — do not wait to be asked for "day 2". A real trip planner hands over a full itinerary, not just transportation and a bed. Proactively build out each day of the trip: something to do in the morning, something in the afternoon, somewhere to eat, an evening plan — using suggestActivities for real, located ideas and proposeNode to place them on the right day. Talk through it a turn or two at a time (don't dump the whole trip in one breath), checking in briefly as you go ("Day one, want something chill after you land, or dive right into the food scene?"). The goal is a traveler who never has to ask "what am I doing on day 2" because you already show up with a real plan for it.
+Once flights and a hotel are settled, KEEP GOING — for every day the traveler is actually there, use suggestActivities (once for food, once for sightseeing/things to do) and proposeNode to place at least 2 restaurants and at least 4 places to visit for that day. Fill one full day per reply — that's a natural chunk of work — then stop with "final", say which day you just filled, and ask if you should keep going with the next one. If trip_context includes a "Return flight" hint, follow its guidance for that specific day instead of the normal full quota (an early return means keep it light with no full day planned; a later return means the morning is free and one optional breakfast spot near the airport is fine, never mandatory). The goal is a traveler who never has to ask "what am I doing on day 2" because you already show up with a real plan for it.
 
 Tools (one per turn):
 - searchFlights { origin?, destination?, departDate? } — search flight inventory. departDate is an ISO date. Returns ranked options with offerId.
@@ -133,12 +134,15 @@ Tools (one per turn):
 - proposeNode { kind, offerId?, name?, category?, neighborhood?, blurb?, start?, end?, dayIndex? } — add an item to the trip board. For kind "flight" or "hotel" pass the offerId from a prior search (its day is inferred from the offer's own date automatically). For kind "activity" pass name/category/neighborhood/blurb, and ALWAYS pass dayIndex (the 1-based day of the trip this happens on — Day 1, Day 2, ...) plus start/end when you know the time of day, so it lands on the right day of the itinerary. Returns the created nodeId. This is how the board builds while you talk. Proposing the same leg or stay again (e.g. the traveler changes their mind between two flight options) automatically replaces the previous unconfirmed pick in place — it will never create a duplicate, so don't worry about removing anything yourself.
 - proposeBooking { nodeId } — for a flight or hotel node, create a PENDING booking that requires the traveler's separate confirmation. You can NEVER confirm a booking yourself.
 - reportDisruption { nodeId?, description? } — when the traveler reports a problem ("my flight got delayed"), hand off to disruption handling. It re-shops and prepares a call.
+- adjustSplit { nodeId, action: "remove"|"restore" } — only when the traveler explicitly changes how a cost is being split with companions on a shared trip (e.g. "just split the hotel, I've got the flights" → remove the flight's split; "actually split the flight too" → restore it). Splitting itself happens automatically on booking; this only excludes or re-includes one item.
 - final { } with a "reply" string — end the turn.
 
 Rules:
 - Never invent flight or hotel prices, times, availability, or confirmation numbers. Only use data returned by tools in the conversation log.
+- Never say something is on the board unless you actually called proposeNode for it earlier in this same tool loop (or it already appears in trip_context's board listing). If you ran out of room to add something you meant to, say so honestly ("I've got the flights and hotel in — still need day two's activities, want me to keep going?") instead of claiming it's already there.
 - Build the board as decisions form: propose nodes as you go so the traveler watches the plan take shape instead of hearing a paragraph.
 - Only call proposeBooking after the traveler has seen an option and explicitly says they want to book or confirm that specific item. Showing an option (proposeNode) is not a request to book it. Never gate something they did not ask to book.
+- "Don't book without confirmation" (traveler's own words or not) is an instruction about proposeBooking ONLY — it never means withhold proposeNode. These are two different, independent tools: proposeNode is always safe to call any time you have a real offerId or activity to show, no matter how firmly or how many times the traveler says not to book. If your reply is about to name a specific priced flight or hotel, call proposeNode for it FIRST, in the same turn-loop — a reply that quotes prices/options the board doesn't show is a bug, not a safe default.
 - Check the current board (grouped by day, in trip context) before proposing anything — never re-propose what is already there for the same day/slot, and never leave a day looking emptier than it should once you have enough context to fill it.
 - Booking is always a proposal. Never say something is "booked" or "done" — say it is "ready to confirm."
 - Offer the two or three options worth hearing, not an exhaustive list. Lead with the single best one, and say briefly why it fits what they told you (nonstop, near the action, under budget, matches their vibe).
@@ -150,7 +154,35 @@ Respond with ONLY a JSON object: { "thought": string, "action": string, "args": 
 }
 
 function nodeLine(n: TripNode): string {
-  return `- [${n.id}] ${n.kind} "${n.title}" ${n.subtitle ? `(${n.subtitle}) ` : ''}status=${n.status}${n.costCents ? ` ${moneyShort(n.costCents)}` : ''}`;
+  // A flight/hotel's time and an activity's category must be visible from the
+  // board listing itself, every turn — otherwise the model only "knows" a
+  // detail like a departure time while that turn's own search tool_result is
+  // still fresh in history, and has to recall it from memory in later turns
+  // (exactly what produces misremembered/hallucinated times and lets the
+  // model lose track of its own per-day restaurant/attraction quota).
+  const time = n.start ? ` @ ${timeOfDay(n.start)}` : '';
+  const category = n.kind === 'activity' && n.detail?.category ? ` [${n.detail.category}]` : '';
+  return `- [${n.id}] ${n.kind} "${n.title}"${time}${category} ${n.subtitle ? `(${n.subtitle}) ` : ''}status=${n.status}${n.costCents ? ` ${moneyShort(n.costCents)}` : ''}`;
+}
+
+// The model is unreliable at date/time arithmetic (see backfillTripDates and
+// the searchFlights date-resolution fix above) — compute the early-vs-late
+// return-day guidance in code and hand it the answer, rather than asking it
+// to compare clock times itself.
+function returnFlightHint(trip: Trip, user: User): string {
+  const home = (user.homeAirport || trip.origin || '').toUpperCase();
+  if (!home) return '';
+  const legs = trip.nodes.filter(
+    (n) => n.kind === 'flight' && n.detail?.offer?.destination === home && n.start != null,
+  );
+  if (!legs.length) return '';
+  const leg = legs.sort((a, b) => (b.start ?? 0) - (a.start ?? 0))[0]; // most recent if replaced
+  const hour = new Date(leg.start!).getUTCHours(); // storage convention: naive-local ms formatted in UTC, see format.ts
+  const early = hour < 13;
+  const guidance = early
+    ? 'an early departure — keep the final day light, no full day of sightseeing planned around it, just a simple wrap-up before heading to the airport.'
+    : 'the traveler has the morning free before departure — you may optionally suggest ONE breakfast spot on the way to the airport, but keep it optional and brief, never a mandatory stop.';
+  return `\nReturn flight: ${leg.title} at ${timeOfDay(leg.start!)} on Day ${leg.dayIndex ?? '?'} — ${guidance}`;
 }
 
 // Grouped by day so the model can see exactly which days already have a plan
@@ -190,7 +222,7 @@ Preferences: ${prefs}
 Today: ${weekdayShort(Date.now())}
 Trip: "${trip.title}"${trip.destination ? ` to ${trip.destination}` : ''}${trip.startDate ? ` (${dateRange(trip.startDate, trip.endDate)})` : ''}
 Current board, by day:
-${boardByDay(trip)}${focusNodeId ? `\nThe traveler is currently looking at node ${focusNodeId}.` : ''}`;
+${boardByDay(trip)}${returnFlightHint(trip, user)}${focusNodeId ? `\nThe traveler is currently looking at node ${focusNodeId}.` : ''}`;
 }
 
 // The orchestrator turn: a hand-rolled tool loop with structured JSON output.
@@ -302,7 +334,7 @@ ${tripContext(freshTrip, user, focusNodeId)}
 ${history.join('\n')}
 </conversation_log>
 
-You are OUT OF TURNS for this reply — do not call another tool, action must be "final". Briefly tell the traveler what you just added to the board (be specific — real names from the board above) and ask a short natural question about what to do next. Return the JSON action object now.`;
+You are OUT OF TURNS for this reply — do not call another tool, action must be "final". Only mention board items that literally appear in the trip_context listing above — never claim something was added if it isn't actually there. Briefly tell the traveler what's genuinely on the board now (be specific — real names from the board above) and ask a short natural question about what to do next. Return the JSON action object now.`;
     const { content } = await mindstudio.generateText({
       message: prompt,
       modelOverride: { model: ORCHESTRATOR_MODEL, temperature: 0.4, maxResponseTokens: 2000 },
@@ -359,7 +391,26 @@ async function executeTool(
       if (trip?.startDate) {
         const home = (user.homeAirport || trip.origin || '').toUpperCase();
         const isReturn = !!home && destination === home;
-        departDate = isReturn ? (trip.endDate ?? trip.startDate) : trip.startDate;
+        if (isReturn) {
+          // trip.endDate only becomes a real, distinct return date once some
+          // node (usually the return flight itself) has backfilled it past
+          // the outbound day — see backfillTripDates. Before that happens
+          // it's still whatever the outbound leg/hotel left it at, often the
+          // SAME calendar day as trip.startDate. Forcing the search onto
+          // trip.endDate in that gap put the return-flight search on the
+          // outbound's own day, which simulateFlights (keyed only on day +
+          // slot index, not route) can then hand back offers with the exact
+          // same departAt/arriveAt as the outbound flight — the board then
+          // shows the "return" leg stacked on day one, and the real day-3
+          // slot the agent described in chat stays empty. Once a real
+          // distinct end date exists, trust it as before (the model drifts
+          // on exact dates); until then the model's own requested date is
+          // the only real signal for "when do I fly home" and must win.
+          const hasRealEndDate = trip.endDate != null && trip.endDate > trip.startDate + 6 * 3600 * 1000;
+          departDate = hasRealEndDate ? trip.endDate! : (parseWhen(args.departDate) ?? trip.startDate);
+        } else {
+          departDate = trip.startDate;
+        }
       }
       const { offers, source } = await searchFlights({ origin, destination, departDate });
       const ranked = rankFlights(offers, user.preferences).slice(0, 4);
@@ -534,6 +585,10 @@ async function executeTool(
     case 'reportDisruption': {
       const res = await runDisruption({ tripId, nodeId: args.nodeId, description: args.description, actor: 'agent:disruption' });
       return { ok: res.ok, message: res.message };
+    }
+    case 'adjustSplit': {
+      if (args.action !== 'remove' && args.action !== 'restore') return { error: 'action must be "remove" or "restore".' };
+      return adjustSplit(tripId, args.nodeId, args.action);
     }
     default:
       return { error: `Unknown action ${call.action}` };

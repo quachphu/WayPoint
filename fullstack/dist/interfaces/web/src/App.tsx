@@ -11,6 +11,7 @@ import { MascotWidget } from './components/MascotWidget';
 import { ChatDock } from './components/social/ChatDock';
 import { ProfileSetup } from './components/onboarding/ProfileSetup';
 import { ProfilePage } from './components/profile/ProfilePage';
+import { RecapPage } from './components/RecapPage';
 
 function CompletingSignIn() {
   return (
@@ -55,7 +56,25 @@ function readInviteToken(): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+// A recap link (/recap/:token) is genuinely public — read once, before
+// anything else, so RecapPage can render ahead of every sign-in gate below.
+function readRecapToken(): string | null {
+  const m = window.location.pathname.match(/^\/recap\/([^/?#]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+// Split out from AuthedApp so the recap short-circuit never sits ahead of
+// that component's own hooks — an early return before useState/useEffect
+// calls would violate the Rules of Hooks (their order must stay unconditional
+// across renders), even though in this specific case the path is stable for
+// the lifetime of a page load.
 export default function App() {
+  const recapToken = readRecapToken();
+  if (recapToken) return <RecapPage token={recapToken} />;
+  return <AuthedApp />;
+}
+
+function AuthedApp() {
   const [user, setUser] = useState(auth.currentUser);
   const [status, setStatus] = useState(auth.authStatus);
   const [showLogin, setShowLogin] = useState(false);

@@ -48,6 +48,7 @@ export async function updateProfile(input: {
   languages?: string[];
   photoUrl?: string | null;
   profileComplete?: boolean;
+  recapOptIn?: boolean;
 }) {
   const userId = auth.userId;
   if (!userId) throw new Error('Please sign in.');
@@ -71,6 +72,7 @@ export async function updateProfile(input: {
   if (input.languages !== undefined) patch.languages = input.languages;
   if (input.photoUrl !== undefined) patch.photoUrl = input.photoUrl ?? undefined;
   if (input.profileComplete !== undefined) patch.profileComplete = input.profileComplete;
+  if (input.recapOptIn !== undefined) patch.recapOptIn = input.recapOptIn;
 
   const user = await Users.update(userId, patch);
 

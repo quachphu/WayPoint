@@ -40,6 +40,21 @@ export function deriveTripState(events: FoldEvent[]): { nodes: TripNode[]; edges
         }
         break;
       }
+      // Same fold as node_proposed — a distinct event kind purely so the raw
+      // log stays honest about provenance (imported vs. agent-proposed) even
+      // though the derived board and rendered card are identical either way.
+      case 'node_imported': {
+        const node = p as TripNode;
+        if (!node.id) break;
+        if (!nodeById.has(node.id)) {
+          const clone: TripNode = { ...node, dependsOn: node.dependsOn || [] };
+          nodes.push(clone);
+          nodeById.set(node.id, clone);
+        } else {
+          patchNode(node.id, node);
+        }
+        break;
+      }
       case 'node_confirmed':
         patchNode(p.nodeId, {
           status: 'confirmed',

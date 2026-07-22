@@ -3,9 +3,10 @@ import QRCode from 'qrcode';
 import { useStore } from '../../lib/store';
 import { presenceColorForId } from '../../lib/presence';
 import { timeOfDay, moneyShort } from '../../lib/format';
-import { IconArrowLeft, IconMessage2, IconSend2, IconSparkles, IconUsers, IconX } from '../icons';
+import { IconArrowLeft, IconMessage2, IconSend2, IconSparkles, IconUsers, IconUsersPlus, IconX } from '../icons';
 import { avatarForUser } from '../../lib/onboardingOptions';
-import { MASCOT_SENDER_ID, type ChatTicket, type ConversationSummary, type FlightOffer } from '../../lib/types';
+import { GroupChatPicker } from './GroupChatPicker';
+import { MASCOT_SENDER_ID, type ChatTicket, type FlightOffer, type Gender } from '../../lib/types';
 
 // Renders a real scannable QR code client-side (no external service call) —
 // the ticket's confirmation code + flight details, encoded as JSON.
@@ -89,15 +90,26 @@ function TicketCard({ ticket }: { ticket: ChatTicket }) {
   );
 }
 
-function conversationTitle(c: ConversationSummary): string {
-  if (c.type === 'group') return c.title || c.participants.map((p) => p.displayName || 'Someone').join(', ');
-  return c.participants[0]?.displayName || 'A fellow traveler';
+// listConversations (the list view) already excludes "me" from `participants`,
+// but getConversation (the active-conversation view) returns EVERYONE,
+// distinguished only by `isMe` — using participants[0] there picked whichever
+// side of the pair happened to sort first, so both people in a direct chat
+// could see the same (wrong) name in the header. Filtering by `isMe` when
+// it's present makes this correct for both shapes.
+function otherParticipants<T extends { isMe?: boolean }>(participants: T[]): T[] {
+  return participants.some((p) => p.isMe !== undefined) ? participants.filter((p) => !p.isMe) : participants;
+}
+
+function conversationTitle(c: { type: 'direct' | 'group'; title: string | null; participants: { displayName: string | null; isMe?: boolean }[] }): string {
+  const others = otherParticipants(c.participants);
+  if (c.type === 'group') return c.title || others.map((p) => p.displayName || 'Someone').join(', ');
+  return others[0]?.displayName || 'A fellow traveler';
 }
 
 // A direct chat shows the other person's real photo (or gender default) —
 // a group doesn't have one shared photo, so it keeps a generic group icon.
-function conversationAvatar(c: ConversationSummary): string | null {
-  return c.type === 'direct' ? avatarForUser(c.participants[0]) : null;
+function conversationAvatar(c: { type: 'direct' | 'group'; participants: { gender: Gender | null; photoUrl: string | null; isMe?: boolean }[] }): string | null {
+  return c.type === 'direct' ? avatarForUser(otherParticipants(c.participants)[0]) : null;
 }
 
 function timeAgo(ms: number): string {
@@ -203,7 +215,7 @@ function ConversationScreen() {
         </button>
         {!isGroup ? (
           <img
-            src={avatarForUser(conversation.participants[0])}
+            src={avatarForUser(otherParticipants(conversation.participants)[0])}
             alt=""
             className="h-10 w-10 shrink-0 rounded-full object-cover"
             style={{ background: 'var(--surface-2)' }}
@@ -226,7 +238,10 @@ function ConversationScreen() {
           const isMascot = m.senderId === MASCOT_SENDER_ID;
           const mine = !isMascot && conversation.participants.find((p) => p.id === m.senderId)?.isMe;
           const prev = messages[i - 1];
-          const showHeader = (isMascot || isGroup) && !mine && prev?.senderId !== m.senderId;
+          // Every non-mine sender gets labeled, not just the mascot/group
+          // case — in a 1:1 chat, unlabeled bubbles from the other person
+          // were visually indistinguishable from Waypoint's.
+          const showHeader = !mine && prev?.senderId !== m.senderId;
           const color = isMascot ? 'var(--live)' : presenceColorForId(m.senderId);
           return (
             <div key={m.id} className="mb-3 flex flex-col" style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}>
@@ -296,8 +311,12 @@ export function ChatDock() {
   const toggle = useStore((s) => s.toggleConversationsPanel);
   const conversation = useStore((s) => s.activeConversation);
   const conversations = useStore((s) => s.conversations);
+  const groupPickerOpen = useStore((s) => s.groupPickerOpen);
+  const openGroupPicker = useStore((s) => s.openGroupPicker);
+  const friends = useStore((s) => s.friends);
 
   if (conversation) return <ConversationScreen />;
+  if (groupPickerOpen) return <GroupChatPicker />;
 
   return (
     <div className="fixed bottom-6 left-6 z-[999998] flex flex-col items-start">
@@ -308,6 +327,16 @@ export function ChatDock() {
         >
           <div className="flex items-center gap-2 border-b border-[var(--border-warm)] px-4 py-3">
             <span className="font-display flex-1 truncate text-sm font-semibold text-[var(--text)]">Chats</span>
+            <button
+              className="icon-btn"
+              onClick={openGroupPicker}
+              disabled={friends.length < 2}
+              aria-label="New group chat"
+              title={friends.length < 2 ? 'Add at least 2 friends to start a group chat' : 'New group chat'}
+              style={friends.length < 2 ? { opacity: 0.4, cursor: 'default' } : undefined}
+            >
+              <IconUsersPlus size={16} />
+            </button>
             <button className="icon-btn" onClick={toggle} aria-label="Close">
               <IconX size={16} />
             </button>

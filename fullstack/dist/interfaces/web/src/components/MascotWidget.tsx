@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useStore } from '../lib/store';
 import { speak } from '../lib/tts';
-import { IconCircleCheck, IconMicrophone } from './icons';
+import { IconCircleCheck, IconLoader2, IconMicrophone } from './icons';
 
 function TypingDots() {
   return (
@@ -28,8 +28,7 @@ function TypingDots() {
 // visible even if the map card itself is scrolled out of view.
 export function MascotWidget() {
   const voiceState = useStore((s) => s.voiceState);
-  const toggleMic = useStore((s) => s.toggleMic);
-  const openNewPlanning = useStore((s) => s.openNewPlanning);
+  const tapMascot = useStore((s) => s.tapMascot);
   const scanning = useStore((s) => s.placesScanning);
   const updateMessage = useStore((s) => s.placesUpdateMessage);
   const dismissPlacesUpdate = useStore((s) => s.dismissPlacesUpdate);
@@ -54,13 +53,7 @@ export function MascotWidget() {
   }, [updateMessage]);
 
   const perked = voiceState === 'listening' || voiceState === 'speaking';
-
-  const onTap = () => {
-    // Only reset into a fresh trip when starting a new listen — tapping
-    // again to stop shouldn't blow away whatever's already in progress.
-    if (voiceState === 'idle' || voiceState === 'ready') openNewPlanning();
-    toggleMic();
-  };
+  const connecting = voiceState === 'connecting';
 
   return (
     <div className="fixed bottom-5 right-5 flex flex-col items-end" style={{ zIndex: 999999 }}>
@@ -88,16 +81,16 @@ export function MascotWidget() {
           style={{ background: 'var(--surface)' }}
         >
           <IconMicrophone size={13} style={{ color: 'var(--live)', flexShrink: 0 }} />
-          {voiceState === 'connecting' ? 'Connecting…' : 'Tap to talk'}
+          {voiceState === 'connecting' ? 'Connecting…' : perked ? 'Tap to stop' : 'Tap to talk'}
         </div>
       )}
 
       <button
-        onClick={onTap}
-        aria-label={scanning ? 'Talk to Waypoint (scouting nearby places)' : 'Talk to Waypoint'}
-        title={scanning ? 'Scouting nearby places…' : 'Talk to Waypoint'}
-        className="block"
-        style={{ animation: scanning ? 'mascot-search 0.9s ease-in-out infinite' : 'mascot-float 3.2s ease-in-out infinite' }}
+        onClick={tapMascot}
+        aria-label={scanning ? 'Talk to Waypoint (scouting nearby places)' : connecting ? 'Connecting to Waypoint' : perked ? 'Stop talking to Waypoint' : 'Talk to Waypoint'}
+        title={scanning ? 'Scouting nearby places…' : connecting ? 'Connecting…' : perked ? 'Tap to stop' : 'Talk to Waypoint'}
+        className="relative block"
+        style={{ animation: scanning || connecting ? 'mascot-search 0.9s ease-in-out infinite' : 'mascot-float 3.2s ease-in-out infinite' }}
       >
         <img
           src={perked ? '/mascot/orb-listening.webp' : '/mascot/orb-idle.webp'}
@@ -108,6 +101,15 @@ export function MascotWidget() {
           className="object-contain"
           style={{ filter: 'drop-shadow(0 8px 22px color-mix(in oklch, var(--live) 50%, transparent))' }}
         />
+        {connecting && (
+          <span
+            className="absolute -top-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full shadow-md"
+            style={{ background: 'var(--surface)' }}
+            aria-hidden
+          >
+            <IconLoader2 size={15} className="wp-spin" style={{ color: 'var(--live)' }} />
+          </span>
+        )}
       </button>
     </div>
   );

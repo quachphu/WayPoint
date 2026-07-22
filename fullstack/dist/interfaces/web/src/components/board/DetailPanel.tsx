@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { useStore } from '../../lib/store';
-import { KindIcon, IconX } from '../icons';
+import { api } from '../../lib/api';
+import { downloadDataUrl } from '../../lib/download';
+import { KindIcon, IconX, IconCalendarPlus, IconWallet } from '../icons';
 import { timeOfDay, weekdayShort, dateRange, moneyExact, durationLabel } from '../../lib/format';
 import { presenceVar } from '../../lib/presence';
 import type { TripNode } from '../../lib/types';
@@ -25,10 +28,46 @@ function Row({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
+// "Straight to Your Wallet" — appears the instant a node is confirmed, since
+// both files are generated on demand from the node's current data rather
+// than something that has to run and be stored at confirm-time.
+function WalletActions({ tripId, node }: { tripId: string; node: TripNode }) {
+  const [busy, setBusy] = useState<'ics' | 'pass' | null>(null);
+
+  const run = async (kind: 'ics' | 'pass') => {
+    setBusy(kind);
+    try {
+      const { icsDataUrl, passPreviewDataUrl } = await api.getNodeWalletFiles({ tripId, nodeId: node.id });
+      if (kind === 'ics') downloadDataUrl(icsDataUrl, `${node.title}.ics`);
+      else window.open(passPreviewDataUrl, '_blank');
+    } catch (err) {
+      console.error('getNodeWalletFiles failed', err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 8, margin: '14px 0' }}>
+      <button className="wp-ghost-btn" onClick={() => run('ics')} disabled={busy === 'ics'}>
+        <IconCalendarPlus size={15} stroke={1.7} />
+        <span>Add to Calendar</span>
+      </button>
+      <button className="wp-ghost-btn" onClick={() => run('pass')} disabled={busy === 'pass'}>
+        <IconWallet size={15} stroke={1.7} />
+        <span>Preview Wallet Pass</span>
+      </button>
+    </div>
+  );
+}
+
 export function DetailPanel() {
   const selectedNodeId = useStore((s) => s.selectedNodeId);
   const trip = useStore((s) => s.trip);
+  const activeTripId = useStore((s) => s.activeTripId);
   const selectNode = useStore((s) => s.selectNode);
+  const openSplit = useStore((s) => s.openSplit);
+  const expense = useStore((s) => s.expenses.find((e) => e.nodeId === selectedNodeId && e.status !== 'removed'));
   const node = trip?.nodes.find((n) => n.id === selectedNodeId) || null;
   if (!node) return null;
 
@@ -113,6 +152,16 @@ export function DetailPanel() {
         )}
         <Row label="Cost" value={node.costCents != null ? moneyExact(node.costCents) : null} />
         <Row label="Confirmation" value={node.bookingRef} />
+        {expense && (
+          <Row
+            label="Split"
+            value={
+              expense.status === 'settled'
+                ? 'All settled up'
+                : `${expense.paidBy.length}/${expense.owedBy.length} paid`
+            }
+          />
+        )}
         {incomingEdge && node.kind !== 'flight' && (
           <Row
             label="Getting here"
@@ -124,6 +173,16 @@ export function DetailPanel() {
           />
         )}
       </div>
+
+      {node.status === 'confirmed' && (node.kind === 'flight' || node.kind === 'hotel' || node.kind === 'activity') && activeTripId && (
+        <WalletActions tripId={activeTripId} node={node} />
+      )}
+
+      {expense && (
+        <button className="wp-ghost-btn" onClick={openSplit} style={{ marginBottom: 14 }}>
+          <span>View split details</span>
+        </button>
+      )}
 
       {node.status === 'disrupted' && alternatives.length > 0 && (
         <div style={{ marginTop: 16 }}>

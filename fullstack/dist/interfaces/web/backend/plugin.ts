@@ -84,6 +84,79 @@ export function waypointServer(): Plugin {
           console.error(`[waypoint] fresh database — seeded scenario "${scenario.id}"`);
         })());
 
+      // Email intake (see fullstack/src/roadmap/ticket-import.md): this process
+      // is already alive for the app's whole lifetime, so a plain interval is
+      // the right amount of infrastructure — no separate worker/queue needed.
+      // Polls a free, anonymous disposable inbox (mail.tm) rather than
+      // receiving a webhook, so no domain or public URL is required either.
+      const POLL_INTERVAL_MS = 60_000;
+      let pollTimer: NodeJS.Timeout | null = null;
+      const startMailPoll = () => {
+        if (pollTimer) return;
+        pollTimer = setInterval(async () => {
+          try {
+            const mailInbox = await server.ssrLoadModule(fsUrl(path.join(fullstackRoot, 'dist/methods/src/common/mailInbox.ts')));
+            const { imported } = await mailInbox.pollAndImport();
+            if (imported) console.error(`[waypoint] mail poll imported ${imported} attachment(s)`);
+          } catch (err) {
+            console.error('[waypoint] mail poll failed:', err);
+          }
+        }, POLL_INTERVAL_MS);
+        server.httpServer?.once('close', () => {
+          if (pollTimer) clearInterval(pollTimer);
+          pollTimer = null;
+        });
+      };
+      startMailPoll();
+
+      // "Waypoint Calls You" (fullstack/src/roadmap/proactive-traveler-calls.md):
+      // nothing in this app can reach a closed browser tab, so a call that's
+      // still "dialing" past a short ring window genuinely wasn't answered —
+      // this sweep is what turns that into the honest fallback chat message.
+      // Same one-interval-per-concern pattern as the mail poll above.
+      const CALL_SWEEP_INTERVAL_MS = 10_000;
+      let callSweepTimer: NodeJS.Timeout | null = null;
+      const startCallSweep = () => {
+        if (callSweepTimer) return;
+        callSweepTimer = setInterval(async () => {
+          try {
+            const travelerCall = await server.ssrLoadModule(fsUrl(path.join(fullstackRoot, 'dist/methods/src/common/travelerCall.ts')));
+            const { missed } = await travelerCall.sweepMissedCalls();
+            if (missed) console.error(`[waypoint] call sweep marked ${missed} traveler call(s) missed`);
+          } catch (err) {
+            console.error('[waypoint] call sweep failed:', err);
+          }
+        }, CALL_SWEEP_INTERVAL_MS);
+        server.httpServer?.once('close', () => {
+          if (callSweepTimer) clearInterval(callSweepTimer);
+          callSweepTimer = null;
+        });
+      };
+      startCallSweep();
+
+      // "The Trip Recap" (fullstack/src/roadmap/trip-recap.md): not latency-
+      // sensitive like the two sweeps above (a multi-day grace window is
+      // already built into the completion check itself), so this runs on a
+      // much longer interval. Same one-interval-per-concern pattern.
+      const RECAP_SWEEP_INTERVAL_MS = 30 * 60_000;
+      let recapSweepTimer: NodeJS.Timeout | null = null;
+      const startRecapSweep = () => {
+        if (recapSweepTimer) return;
+        recapSweepTimer = setInterval(async () => {
+          try {
+            const tripRecap = await server.ssrLoadModule(fsUrl(path.join(fullstackRoot, 'dist/methods/src/common/tripRecap.ts')));
+            await tripRecap.sweepTripsForRecap();
+          } catch (err) {
+            console.error('[waypoint] trip recap sweep failed:', err);
+          }
+        }, RECAP_SWEEP_INTERVAL_MS);
+        server.httpServer?.once('close', () => {
+          if (recapSweepTimer) clearInterval(recapSweepTimer);
+          recapSweepTimer = null;
+        });
+      };
+      startRecapSweep();
+
       server.middlewares.use(async (req, res, next) => {
         const url = (req.url || '').split('?')[0];
         if (!url.startsWith('/_/')) return next();

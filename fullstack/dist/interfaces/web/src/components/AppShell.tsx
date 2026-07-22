@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
 import { auth } from '../lib/api';
+import { voice } from '../lib/voice';
 import { Board } from './board/Board';
 import { DetailPanel } from './board/DetailPanel';
 import { Conversation } from './Conversation';
@@ -8,7 +9,8 @@ import { CallLayer } from './CallLayer';
 import { VoiceOrb } from './VoiceOrb';
 import { Facepile } from './people/Facepile';
 import { PeoplePanel } from './people/PeoplePanel';
-import { dateRange } from '../lib/format';
+import { SplitPanel } from './people/SplitPanel';
+import { dateRange, moneyExact } from '../lib/format';
 import {
   IconPlus,
   IconMoon,
@@ -18,6 +20,7 @@ import {
   IconUsers,
   IconArrowLeft,
   IconMicrophone,
+  IconReceipt2,
 } from './icons';
 
 function useIsMobile(bp = 880) {
@@ -104,6 +107,7 @@ function Menu() {
           <button
             className="menu-item"
             onClick={() => {
+              void voice.stopAll();
               newTrip();
               setOpen(false);
             }}
@@ -126,6 +130,14 @@ function TopBar({ minimal = false }: { minimal?: boolean }) {
   const newTrip = useStore((s) => s.newTrip);
   const goHome = useStore((s) => s.goHome);
   const triggerDisruption = useStore((s) => s.triggerDisruption);
+  // Already filtered server-side (getTripBundle never includes 'removed'
+  // rows) — select the array as-is. Re-filtering here would return a new
+  // array reference on every render, which breaks Zustand/useSyncExternalStore's
+  // "stable snapshot" contract and causes an infinite render loop.
+  const expenses = useStore((s) => s.expenses);
+  const openSplit = useStore((s) => s.openSplit);
+  const splitOpen = useStore((s) => s.splitOpen);
+  const unpaidCount = expenses.reduce((n, e) => n + (e.owedBy.length - e.paidBy.length), 0);
 
   return (
     <div className="titlebar no-select">
@@ -153,13 +165,27 @@ function TopBar({ minimal = false }: { minimal?: boolean }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {trip && !minimal && <Facepile />}
+        {trip && !minimal && expenses.length > 0 && (
+          <button className={`icon-btn ${splitOpen ? 'is-active' : ''}`} onClick={openSplit} aria-label="Split the bill" title="Split the bill">
+            <IconReceipt2 size={18} />
+            {unpaidCount > 0 && <span className="wp-facepile-more" style={{ marginLeft: 2 }}>{unpaidCount}</span>}
+          </button>
+        )}
         {trip && trip.status === 'confirmed' && !minimal && (
           <button className="pill-btn" onClick={triggerDisruption} title="Demo: simulate a flight delay">
             <IconClockHour4 size={16} /> Simulate a delay
           </button>
         )}
         {!minimal && (
-          <button className="icon-btn" onClick={newTrip} aria-label="New trip" title="New trip">
+          <button
+            className="icon-btn"
+            onClick={() => {
+              void voice.stopAll();
+              newTrip();
+            }}
+            aria-label="New trip"
+            title="New trip"
+          >
             <IconPlus size={18} />
           </button>
         )}
@@ -208,11 +234,14 @@ function SplitShell() {
   );
 }
 
-// The right-docked slot is shared: People takes precedence when open, otherwise
-// the node-detail panel. Both cross-fade in the same position.
+// The right-docked slot is shared: People and Split the Bill take precedence
+// over the node-detail panel when open. All three cross-fade in the same position.
 function DockedPanel() {
   const peopleOpen = useStore((s) => s.peopleOpen);
-  return peopleOpen ? <PeoplePanel /> : <DetailPanel />;
+  const splitOpen = useStore((s) => s.splitOpen);
+  if (peopleOpen) return <PeoplePanel />;
+  if (splitOpen) return <SplitPanel />;
+  return <DetailPanel />;
 }
 
 export function AppShell() {

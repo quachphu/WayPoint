@@ -2,8 +2,9 @@ import { auth, stream } from '@mindstudio-ai/agent';
 import { Users } from './tables/users';
 import { Trips } from './tables/trips';
 import { Messages, type Message } from './tables/messages';
-import { extractTripMeta, createTripForUser, funnifyTripName } from './common/trips';
+import { extractTripMeta, createTripForUser, funnifyTripName, isDifferentTripRequest } from './common/trips';
 import { assertTripAccess, requestedByFor } from './common/collaborators';
+import { setPendingVoiceConfirm, takePendingVoiceConfirm, isAffirmative } from './common/voiceConfirm';
 import { runConversation } from './common/agent';
 
 // The single entry point for both voice and chat. Streams status, board diffs,
@@ -31,19 +32,60 @@ export async function converse(input: {
   let requestedBy = null;
   let authorName: string | undefined;
   let authorColor: string | undefined;
-  if (input.tripId) {
-    const access = await assertTripAccess(input.tripId, userId);
-    trip = access.trip;
-    requestedBy = await requestedByFor(access, userId);
-    if (requestedBy) {
-      authorName = requestedBy.name;
-      authorColor = requestedBy.color;
+
+  // A tripId being passed doesn't necessarily mean this turn is ABOUT that
+  // trip — mid-conversation on one trip, naming a clearly different
+  // destination ("plan a Spain trip...") should silently start a new trip,
+  // same as tapping "+" would, not get stuck inside the open trip's context
+  // asking whether to switch. See common/trips.ts's isDifferentTripRequest.
+  const access = input.tripId ? await assertTripAccess(input.tripId, userId) : null;
+  const startFresh = !access || (await isDifferentTripRequest(text, access.trip));
+
+  // Switching an already-open trip to a brand new one from a single spoken
+  // utterance is exactly the shape of damage fabricated Vocal Bridge turns
+  // have caused (see common/voiceConfirm.ts) — require a genuine affirmative
+  // follow-up before committing. Typed text carries no fabrication risk (no
+  // server-side "AI agent" reformulating it), so this is scoped to voice
+  // only; chat keeps the original silent, no-nag switch behavior.
+  let creationText = text;
+  if (access && startFresh && source === 'voice') {
+    const pendingText = takePendingVoiceConfirm(userId, `switch_trip:${access.trip.id}`);
+    if (pendingText == null) {
+      setPendingVoiceConfirm(userId, `switch_trip:${access.trip.id}`, text);
+      const reply = `I heard: "${text}" — that sounds like a different trip. Want me to start planning that, or are we still on ${access.trip.title}?`;
+      await Messages.push({ tripId: access.trip.id, role: 'user', text, source, status: 'complete', authorId: userId });
+      await Messages.push({ tripId: access.trip.id, role: 'agent', text: reply, source: 'chat', status: 'complete' });
+      const finalTrip = await Trips.get(access.trip.id);
+      return { tripId: access.trip.id, created: false, reply, version: finalTrip?.version ?? 0, trip: finalTrip };
     }
-  } else {
-    const meta = await extractTripMeta(text);
-    trip = await createTripForUser(userId, meta);
-    created = true;
-    await stream({ type: 'trip_created', trip });
+    if (isAffirmative(text)) {
+      creationText = pendingText; // proceed below using what actually described the new trip, not this "yes"
+    } else {
+      // Not a clear yes — stay put; treat this turn as a normal continuation
+      // instead of silently dropping it.
+      trip = access.trip;
+      requestedBy = await requestedByFor(access, userId);
+      if (requestedBy) {
+        authorName = requestedBy.name;
+        authorColor = requestedBy.color;
+      }
+    }
+  }
+
+  if (!trip) {
+    if (access && !startFresh) {
+      trip = access.trip;
+      requestedBy = await requestedByFor(access, userId);
+      if (requestedBy) {
+        authorName = requestedBy.name;
+        authorColor = requestedBy.color;
+      }
+    } else {
+      const meta = await extractTripMeta(creationText);
+      trip = await createTripForUser(userId, meta);
+      created = true;
+      await stream({ type: 'trip_created', trip });
+    }
   }
 
   // Stamp the author on the message so shared conversations attribute companions.

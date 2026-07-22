@@ -61,6 +61,26 @@
       "name": "post_comments",
       "path": "dist/methods/src/tables/postComments.ts",
       "export": "PostComments"
+    },
+    {
+      "name": "pending_imports",
+      "path": "dist/methods/src/tables/pendingImports.ts",
+      "export": "PendingImports"
+    },
+    {
+      "name": "mail_inbox_state",
+      "path": "dist/methods/src/tables/mailInboxState.ts",
+      "export": "MailInboxState"
+    },
+    {
+      "name": "trip_expenses",
+      "path": "dist/methods/src/tables/tripExpenses.ts",
+      "export": "TripExpenses"
+    },
+    {
+      "name": "trip_recaps",
+      "path": "dist/methods/src/tables/tripRecaps.ts",
+      "export": "TripRecaps"
     }
   ],
   "methods": [
@@ -279,6 +299,72 @@
       "name": "Delete Post",
       "path": "dist/methods/src/deletePost.ts",
       "export": "deletePost"
+    },
+    {
+      "id": "import-document",
+      "name": "Import Document",
+      "path": "dist/methods/src/importDocument.ts",
+      "export": "importDocument"
+    },
+    {
+      "id": "resolve-import",
+      "name": "Resolve Import",
+      "path": "dist/methods/src/resolveImport.ts",
+      "export": "resolveImport"
+    },
+    {
+      "id": "check-import-inbox",
+      "name": "Check Import Inbox",
+      "path": "dist/methods/src/checkImportInbox.ts",
+      "export": "checkImportInbox"
+    },
+    {
+      "id": "answer-traveler-call",
+      "name": "Answer Traveler Call",
+      "path": "dist/methods/src/answerTravelerCall.ts",
+      "export": "answerTravelerCall"
+    },
+    {
+      "id": "decline-traveler-call",
+      "name": "Decline Traveler Call",
+      "path": "dist/methods/src/declineTravelerCall.ts",
+      "export": "declineTravelerCall"
+    },
+    {
+      "id": "mark-expense-paid",
+      "name": "Mark Expense Paid",
+      "path": "dist/methods/src/markExpensePaid.ts",
+      "export": "markExpensePaid"
+    },
+    {
+      "id": "get-node-wallet-files",
+      "name": "Get Node Wallet Files",
+      "path": "dist/methods/src/getNodeWalletFiles.ts",
+      "export": "getNodeWalletFiles"
+    },
+    {
+      "id": "list-friends",
+      "name": "List Friends",
+      "path": "dist/methods/src/listFriends.ts",
+      "export": "listFriends"
+    },
+    {
+      "id": "ask-mascot",
+      "name": "Ask Mascot",
+      "path": "dist/methods/src/askMascot.ts",
+      "export": "askMascot"
+    },
+    {
+      "id": "get-recap",
+      "name": "Get Recap",
+      "path": "dist/methods/src/getRecap.ts",
+      "export": "getRecap"
+    },
+    {
+      "id": "run-trip-recap-sweep",
+      "name": "Run Trip Recap Sweep",
+      "path": "dist/methods/src/runTripRecapSweep.ts",
+      "export": "runTripRecapSweep"
     }
   ],
   "interfaces": [

@@ -43,6 +43,7 @@ export const api = createClient<{
     languages?: string[];
     photoUrl?: string | null;
     profileComplete?: boolean;
+    recapOptIn?: boolean;
   }): Promise<{ user: User; welcomeMessage?: string }>;
   deleteAccount(): Promise<{ ok: boolean }>;
   textToSpeech(input: { text: string }): Promise<{ audioDataUrl: string | null }>;
@@ -53,17 +54,30 @@ export const api = createClient<{
   approveAction(
     input: { actionId: string },
     opts?: Opts,
-  ): Promise<{ ok: boolean; kind: string; callSessionId?: string; tripId: string; version?: number; trip?: Trip }>;
+  ): Promise<{ ok: boolean; kind: string; callSessionId?: string; tripId: string; version?: number; trip?: Trip; expenses?: import('./types').TripExpense[] }>;
   declineAction(input: { actionId: string }): Promise<{ ok: boolean; actionId: string }>;
   reportDisruption(
     input: { tripId: string; nodeId?: string; description?: string },
     opts?: Opts,
   ): Promise<{ ok: boolean; message: string; tripId: string; version: number; trip: Trip }>;
   getVoiceToken(): Promise<{ enabled: boolean; token?: VoiceToken }>;
+  importDocument(
+    input: { tripId?: string; fileDataUrl: string; fileName: string },
+    opts?: Opts,
+  ): Promise<{ ok: boolean; tripId: string | null; reply: string; needsClarification: boolean; importId?: string }>;
+  resolveImport(
+    input: { importId: string; answer: string },
+    opts?: Opts,
+  ): Promise<{ ok: boolean; tripId: string | null; reply: string; needsClarification: boolean; importId?: string }>;
+  checkImportInbox(): Promise<{ imported: number }>;
   runCall(
     input: { tripId: string; callSessionId: string },
     opts?: Opts,
   ): Promise<{ ok: boolean; outcome: string; callSessionId: string; actionId: string | null; tripId: string; version: number }>;
+  answerTravelerCall(input: { callSessionId: string }, opts?: Opts): Promise<{ ok: boolean; outcome: string }>;
+  declineTravelerCall(input: { callSessionId: string }): Promise<{ ok: boolean }>;
+  markExpensePaid(input: { expenseId: string }): Promise<{ ok: boolean; expense: import('./types').TripExpense }>;
+  getNodeWalletFiles(input: { tripId: string; nodeId: string }): Promise<{ icsDataUrl: string; passPreviewDataUrl: string }>;
   // Shared trips
   createInvite(input: { tripId: string; email: string }): Promise<InviteResult>;
   claimInvite(input: { inviteToken: string }): Promise<TripBundle & { ok: boolean; tripId: string; roster: RosterMember[] }>;
@@ -89,6 +103,9 @@ export const api = createClient<{
   sendFriendRequest(input: { toUserId: string }): Promise<{ request: { id: string; status: string } }>;
   respondToFriendRequest(input: { requestId: string; accept: boolean }): Promise<{ request: { id: string; status: string } }>;
   listFriendRequests(): Promise<{ requests: FriendRequestSummary[] }>;
+  listFriends(): Promise<{ friends: import('./types').FriendSummary[] }>;
+  askMascot(input: { text: string }): Promise<{ intent: 'plan_trip' | 'chat'; reply: string; seedText: string | null }>;
+  getRecap(input: { token: string }): Promise<{ recap: import('./types').PublicRecap | null }>;
   searchTripOptionsInChat(input: { conversationId: string; destination: string; originCity?: string }): Promise<{ messages: ConversationMessage[] }>;
   bookFlightFromChat(input: { conversationId: string; messageId: string }): Promise<{ message: ConversationMessage }>;
   getTrendingPlaces(input: { city?: string; region?: string; country?: string; lat: number; lng: number }): Promise<{ places: TrendingPlace[]; scanned: boolean; freshlyScanned?: boolean; added?: number }>;

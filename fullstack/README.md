@@ -47,7 +47,7 @@ begin
     'users', 'messages', 'pending_actions',
     'sessions', 'auth_accounts', 'meta',
     'conversations', 'conversation_messages', 'city_places', 'friend_requests',
-    'posts', 'post_comments'
+    'posts', 'post_comments', 'pending_imports', 'mail_inbox_state', 'trip_expenses', 'trip_recaps'
   ]
   loop
     execute format(
@@ -76,10 +76,17 @@ Set in a repo-root `.env`, loaded automatically by the server.
 | `VOCAL_BRIDGE_API_KEY` | Mints voice-session tokens (`getVoiceToken`) | Voice falls back to browser Web Speech |
 | `VOCAL_BRIDGE_AGENT_ID` | Only for account-scoped VB keys (`X-Agent-Id`) | Not needed for agent-scoped keys |
 | `SABRE_TOKEN` + `SABRE_PCC` | Real flight search (Bargain Finder Max, cert env) | Simulated inventory |
+| `LANDING_AI_KEY` (or lowercase `landing_ai`) | Document extraction for the ticket-import feature (PDF/photo confirmations → board nodes) | Import replies "couldn't read that document" and asks the traveler to type the details |
 | `WAYPOINT_DB` | SQLite file path | `fullstack/.data/waypoint.db` |
 | `WAYPOINT_SCENARIO` | Seed scenario for a fresh db | `weekend-planned` |
 
 Every fallback logs its real reason via `console.error`, and the UI completes either way.
+
+## 📥 Email intake
+
+Forwarding a flight/hotel confirmation email works with **no setup at all**: on first run the server auto-generates a free, anonymous inbox via [mail.tm](https://mail.tm)'s public API — no domain, no signup identity, no public URL needed, since the server *polls* `GET /messages` every ~60s instead of receiving a webhook (see `dist/methods/src/common/mailInbox.ts`). The generated address is shown right in the app, next to the import button in the Conversation panel ("or forward a confirmation to …").
+
+Forwarded mail is matched to a Waypoint account by the sender's email — a message from an address that isn't a registered traveler is logged and dropped, never imported. Uploading a PDF or a photo of a printed itinerary (via the paperclip button) works the same way immediately, no waiting on the poll interval — both paths share `common/importPipeline.ts`. Trade-off worth knowing: mail.tm is a free/unofficial disposable-mail service, fine for a real end-to-end demo but not an enterprise mail provider — some corporate mail systems may decline to deliver to a known disposable-inbox domain.
 
 ## 🗂️ Structure
 

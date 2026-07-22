@@ -53,7 +53,7 @@ export interface TripEdge {
   distanceKm?: number | null;
 }
 
-export type OfferSource = 'sabre' | 'simulated';
+export type OfferSource = 'sabre' | 'simulated' | 'imported';
 
 export interface FlightOffer {
   id: string;
@@ -108,6 +108,7 @@ export type ToolAction =
   | 'proposeNode'
   | 'proposeBooking'
   | 'reportDisruption'
+  | 'adjustSplit'
   | 'final';
 
 export interface ToolCall {

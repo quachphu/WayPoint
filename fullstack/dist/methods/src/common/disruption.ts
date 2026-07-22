@@ -1,10 +1,12 @@
 import { stream } from '@mindstudio-ai/agent';
 import { Trips } from '../tables/trips';
 import { PendingActions } from '../tables/pendingActions';
+import { Users } from '../tables/users';
 import { searchFlights } from './sabre';
 import { rankFlights } from './rank';
 import { recordEvents } from './tripState';
 import { weekdayShort, timeOfDay, durationLabel } from './format';
+import { placeTravelerCall } from './travelerCall';
 import type { TripNode, FlightOffer } from './types';
 
 // Shared disruption handling used by both the reportDisruption method and the
@@ -111,5 +113,23 @@ export async function runDisruption(opts: {
 
   const n = alternatives.length;
   const message = `Your ${origin} to ${destination} flight just got pushed about three hours. I found ${n} later option${n === 1 ? '' : 's'} and I can call ${carrier} to lock in the change. Want me to make the call?`;
+
+  // "Waypoint Calls You" — for anything urgent enough to interrupt a day,
+  // Waypoint calls the traveler directly, same disclosure/audit discipline as
+  // the airline call above, strictly gated on their own callConsent. Purely
+  // additive: never blocks or changes the airline place_call gate above.
+  const owner = await Users.get(trip.userId);
+  if (owner?.callConsent) {
+    await placeTravelerCall({
+      tripId: opts.tripId,
+      nodeId: target.id,
+      userId: trip.userId,
+      situationLabel: `your ${origin} to ${destination} flight`,
+      message,
+      carrier,
+      route: { origin, destination },
+    });
+  }
+
   return { ok: true, message, node: reshopNode, carrier, alternatives };
 }

@@ -7,6 +7,7 @@ import { bookFlight, bookHotel } from './common/sabre';
 import { recordEvents } from './common/tripState';
 import { disclosureLine } from './common/callScript';
 import { assertTripAccess } from './common/collaborators';
+import { maybeCreateSplit, activeExpensesForTrip } from './common/expenses';
 import type { FlightOffer, HotelOffer } from './common/types';
 
 // The ONLY path that executes a real booking or an outbound call. Hard-refuses
@@ -41,6 +42,8 @@ export async function approveAction(input: { actionId: string }) {
       const call = await CallSessions.push({
         tripId: trip.id,
         nodeId: p.nodeId || action.nodeId || '',
+        kind: 'to_venue',
+        userId: trip.userId,
         target: p.target || 'the airline',
         goal: p.goal || 'Rebook the flight',
         disclosureLine: disclosureLine(user?.displayName), // hardcoded, stored verbatim
@@ -59,6 +62,9 @@ export async function approveAction(input: { actionId: string }) {
 
     if (action.kind === 'book_flight' || action.kind === 'book_hotel' || action.kind === 'book_activity') {
       await executeBooking(action);
+      // Split the Bill: fully opt-in via maybeCreateSplit's own checks (no-op
+      // on a solo trip or one with no other active companions).
+      await maybeCreateSplit(action.tripId, action.payload?.nodeId || action.nodeId, trip.userId);
     } else if (action.kind === 'rebook') {
       await executeRebook(action);
     }
@@ -70,7 +76,8 @@ export async function approveAction(input: { actionId: string }) {
   }
 
   const finalTrip = await Trips.get(trip.id);
-  return { ok: true, kind: action.kind, tripId: trip.id, version: finalTrip?.version ?? 0, trip: finalTrip };
+  const expenses = await activeExpensesForTrip(trip.id);
+  return { ok: true, kind: action.kind, tripId: trip.id, version: finalTrip?.version ?? 0, trip: finalTrip, expenses };
 }
 
 async function executeBooking(action: PendingAction & { id: string }) {

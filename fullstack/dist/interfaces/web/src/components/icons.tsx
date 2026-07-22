@@ -37,6 +37,11 @@ import {
   IconHeart,
   IconHeartFilled,
   IconSearch,
+  IconPaperclip,
+  IconReceipt2,
+  IconCalendarPlus,
+  IconWallet,
+  IconUsersPlus,
 } from '@tabler/icons-react';
 import type { NodeKind } from '../lib/types';
 
@@ -93,4 +98,9 @@ export {
   IconHeart,
   IconHeartFilled,
   IconSearch,
+  IconPaperclip,
+  IconReceipt2,
+  IconCalendarPlus,
+  IconWallet,
+  IconUsersPlus,
 };

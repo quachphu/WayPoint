@@ -128,6 +128,9 @@ export interface CallSession {
   id: string;
   tripId: string;
   nodeId: string;
+  // Who Waypoint is calling — a venue on the traveler's behalf, or the
+  // traveler themselves ("Waypoint Calls You").
+  kind: 'to_venue' | 'to_traveler';
   target: string;
   goal: string;
   disclosureLine: string;
@@ -173,6 +176,7 @@ export interface User {
   languages?: string[];
   photoUrl?: string;
   profileComplete?: boolean;
+  recapOptIn?: boolean;
 }
 
 export type LocationScope = 'city' | 'region' | 'country';
@@ -207,6 +211,28 @@ export interface FriendRequestSummary {
   gender: Gender | null;
   photoUrl: string | null;
   createdAt: number;
+}
+
+// Every accepted friend, location-independent (unlike NearbyUser's
+// friendStatus, which only covers people in the current location scope).
+export interface FriendSummary {
+  id: string;
+  displayName: string | null;
+  photoUrl: string | null;
+  gender: Gender | null;
+}
+
+// The public, shareable shape of a finished trip's story — served by the
+// one genuinely unauthenticated endpoint in the app (getRecap).
+export interface PublicRecap {
+  title: string;
+  destination: string;
+  startDate: number | null;
+  endDate: number | null;
+  narrative: string;
+  disruptionLine: string | null;
+  companions: { name: string; color: string }[];
+  photoUrls: string[];
 }
 
 export interface ConversationSummary {
@@ -319,12 +345,28 @@ export interface PostComment {
   authorPhotoUrl: string | null;
 }
 
+// A cost split among a shared trip's companions (Split the Bill). Waypoint
+// never moves money — this tracks who owes what and who's settled.
+export interface TripExpense {
+  id: string;
+  tripId: string;
+  nodeId: string;
+  title: string;
+  amountCents: number;
+  owedBy: string[];
+  paidBy: string[];
+  perPersonCents: number;
+  status: 'open' | 'settled' | 'removed';
+  createdBy: string;
+}
+
 export interface TripBundle {
   trip: Trip | null;
   messages: Message[];
   pendingActions: PendingAction[];
   activeCall: CallSession | null;
   roster?: RosterMember[];
+  expenses?: TripExpense[];
 }
 
 export interface Bootstrap {
@@ -337,6 +379,10 @@ export interface Bootstrap {
   pendingActions?: PendingAction[];
   activeCall?: CallSession | null;
   roster?: RosterMember[];
+  // The app's shared disposable-inbox address (mail.tm) — forward a
+  // confirmation here and it's parsed onto the traveler's board automatically.
+  importEmailAddress?: string | null;
+  expenses?: TripExpense[];
 }
 
 // The live poll result. `changed:false` means the trip is unchanged since the
@@ -351,6 +397,7 @@ export type SyncResult =
       messages: Message[];
       pendingActions: PendingAction[];
       activeCall: CallSession | null;
+      expenses: TripExpense[];
     };
 
 export interface InviteResult {

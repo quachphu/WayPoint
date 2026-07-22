@@ -14,6 +14,21 @@
 
 import { VocalBridge, ConnectionState, type TokenResponse } from '@vocalbridgeai/sdk';
 
+// Vocal Bridge's own server-side agent turned out to fabricate entire
+// conversation turns with no real speech input at all — not mis-hearing, but
+// inventing fully-formed, self-referential requests ("Set the trip name to
+// X for the current Y trip planning session, then continue with...") that
+// created and mutated real trips with the traveler saying nothing. The
+// browser-native fallback (this flag forced on) isn't a real fix either: the
+// Web Speech API's SpeechRecognition interface simply isn't supported in
+// every browser (notably Firefox), so forcing it left voice completely
+// unavailable there. Back to Vocal Bridge — since it's the only voice engine
+// that actually works across browsers here — but see common/voiceConfirm.ts
+// on the backend: trip creation/rename from a voice turn now requires a
+// second, genuine affirmative turn before committing, so a single fabricated
+// turn can no longer silently create or rename anything by itself.
+const FORCE_BROWSER_SPEECH = false;
+
 // 'connecting' is distinct from 'ready' — 'ready' is the passive, pre-tap
 // "breathing" invite state (front door), while 'connecting' is what fires
 // the instant a tap starts a Vocal Bridge session, so there's always a
@@ -56,6 +71,15 @@ class VoiceEngine {
   // over http://localhost or https this is true; over a raw LAN IP it's false,
   // which is the #1 reason "voice does nothing" on someone else's machine.
   private secure = true;
+  // The raw speech-to-text transcript for the traveler's own turn, as
+  // reported by the SDK's 'transcript' event — distinct from (and more
+  // trustworthy than) the `query` string handed to onAIAgentQuery, which
+  // appeared to sometimes be a fabricated/reformulated request bearing no
+  // relation to what was actually said (e.g. asking for Seattle and getting
+  // a fully-formed, unrelated "flights to Tokyo" query instead). Buffered
+  // with a timestamp so a stale transcript from a prior turn can't get
+  // reused for a later query.
+  private lastUserTranscript: { text: string; at: number } | null = null;
   onStateChange: StateCb | null = null;
   onResult: ResultCb | null = null; // browser path: recognized text → store.send
   onQuery: QueryCb | null = null; // vocal bridge path: agent query → reply text
@@ -103,7 +127,7 @@ class VoiceEngine {
   // mic is blocked for every engine, so neither path can run.
   get available(): boolean {
     if (!this.secure) return false;
-    return this.recognitionSupported || (!this.vbDisabled && !!this.mintToken);
+    return this.recognitionSupported || (!FORCE_BROWSER_SPEECH && !this.vbDisabled && !!this.mintToken);
   }
 
   // Why the orb can't do anything, so the UI can give an actionable message
@@ -186,6 +210,20 @@ class VoiceEngine {
             },
           },
           participantName: 'Traveler',
+          // Explicit, not just relying on SDK defaults: without echo
+          // cancellation, the mic re-arming in markSpeaking() below (a rough,
+          // word-count-based estimate of when TTS playback ends, since the SDK
+          // exposes no real "done speaking" event) can reopen the mic while
+          // the agent is still audibly talking — the mic then picks up the
+          // agent's own voice as if it were a new spoken query, and the
+          // downstream STT/query layer produces a plausible-sounding "reply"
+          // to its own words. Reported as the app "talking randomly" with no
+          // one speaking; this is the most likely real cause.
+          audioCaptureDefaults: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
         });
         vb.on('connectionStateChanged', (s) => {
           if (s === ConnectionState.Connecting || s === ConnectionState.WaitingForAgent) {
@@ -203,11 +241,20 @@ class VoiceEngine {
         });
         vb.on('transcript', (t) => {
           if (t.role === 'agent') this.markSpeaking(t.text);
+          else if (t.role === 'user' && t.text.trim()) this.lastUserTranscript = { text: t.text.trim(), at: Date.now() };
         });
         vb.on('error', (e) => console.error('[voice] vocal bridge error:', e.code, e.message));
         // Bring-your-own-agent: the VB runtime asks us, we ask the orchestrator,
-        // the return value is spoken back automatically (docs/03 §2.5).
-        vb.onAIAgentQuery(async (q) => (this.onQuery ? await this.onQuery(q) : ''));
+        // the return value is spoken back automatically (docs/03 §2.5). Prefer
+        // the raw transcript captured just above over `q` when one landed
+        // recently — see lastUserTranscript's own comment for why `q` alone
+        // isn't trustworthy enough to hand straight to the orchestrator.
+        vb.onAIAgentQuery(async (q) => {
+          const fresh = this.lastUserTranscript && Date.now() - this.lastUserTranscript.at < 8000 ? this.lastUserTranscript.text : null;
+          const text = fresh || q;
+          if (fresh && fresh !== q) console.warn('[voice] onAIAgentQuery query diverged from raw transcript; using transcript:', { query: q, transcript: fresh });
+          return this.onQuery ? await this.onQuery(text) : '';
+        });
         this.vb = vb;
       }
       // Captured once and used for the rest of this call — reading `this.vb`
@@ -256,7 +303,7 @@ class VoiceEngine {
       return false;
     }
     this.userMuted = false;
-    if (!this.vbDisabled && this.mintToken) {
+    if (!FORCE_BROWSER_SPEECH && !this.vbDisabled && this.mintToken) {
       // Set synchronously, before any await, so the tap gets a visible
       // reaction on the very same frame instead of waiting on the token
       // mint + connect round trip.
@@ -338,6 +385,40 @@ class VoiceEngine {
       /* noop */
     }
     if (this.state === 'speaking') this.setState('idle');
+  }
+
+  // Full teardown — used when leaving the screen the conversation started on
+  // (navigating back, switching trips) and when a traveler explicitly wants
+  // the agent to stop talking (a second tap on the mascot). The Vocal Bridge
+  // SDK exposes no "stop current playback" call, only connect/disconnect —
+  // disconnecting is the only real lever to cut off audio that's already
+  // playing, so this ends the session outright rather than just muting it.
+  // The next startListening() reconnects cleanly from scratch.
+  async stopAll() {
+    if (this.speakTimer) {
+      window.clearTimeout(this.speakTimer);
+      this.speakTimer = null;
+    }
+    this.stopSpeaking();
+    this.wantListening = false;
+    if (this.recognition) {
+      try {
+        this.recognition.stop();
+      } catch {
+        /* noop */
+      }
+    }
+    if (this.vb) {
+      const dead = this.vb;
+      this.vb = null;
+      try {
+        await dead.disconnect();
+      } catch (err) {
+        console.error('[voice] disconnect during stopAll failed:', err);
+      }
+    }
+    this.userMuted = false;
+    this.setState('idle');
   }
 }
 

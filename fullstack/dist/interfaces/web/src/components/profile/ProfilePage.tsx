@@ -22,6 +22,7 @@ export function ProfilePage() {
   const [music, setMusic] = useState<string[]>(profile?.favoriteMusic ?? []);
   const [languages, setLanguages] = useState<string[]>(profile?.languages ?? []);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(profile?.photoUrl);
+  const [recapOptIn, setRecapOptIn] = useState(profile?.recapOptIn ?? false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -78,6 +79,7 @@ export function ProfilePage() {
         favoriteGames: games,
         favoriteMusic: music,
         languages,
+        recapOptIn,
       });
       pushToast('success', 'Profile updated.');
     } catch (err: any) {
@@ -185,6 +187,15 @@ export function ProfilePage() {
           <div className="onboard-section">
             <div className="onboard-label">Languages you speak</div>
             <ChipPicker options={COMMON_LANGUAGES} selected={languages} onChange={setLanguages} />
+          </div>
+
+          <div className="onboard-section">
+            <div className="onboard-label">Trip recaps</div>
+            <label className="consent">
+              <input type="checkbox" checked={recapOptIn} onChange={(e) => setRecapOptIn(e.target.checked)} />
+              <span className="consent-box" aria-hidden />
+              <span>Send me a shareable recap when a trip wraps up — off by default.</span>
+            </label>
           </div>
 
           <button className="btn btn--primary" style={{ width: '100%', marginTop: 24 }} disabled={!ready} onClick={save}>

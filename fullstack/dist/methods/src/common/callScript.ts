@@ -5,3 +5,11 @@ export function disclosureLine(travelerName?: string | null): string {
   const name = (travelerName || '').trim() || 'a Waypoint traveler';
   return `Hi, this is an AI assistant calling on behalf of ${name} regarding their travel booking.`;
 }
+
+// Same discipline, adapted tone: this one calls the traveler directly rather
+// than a venue on their behalf, so it introduces itself the way a real
+// assistant calling you would, not a third-party disclosure. Still a fixed
+// string assembled in code, never model-generated.
+export function travelerDisclosureLine(situationLabel: string): string {
+  return `Hi, it's Waypoint, calling about ${situationLabel}.`;
+}

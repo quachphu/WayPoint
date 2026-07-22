@@ -8,6 +8,7 @@ import {
   listAccessibleTrips,
   buildRoster,
 } from './common/collaborators';
+import { currentInboxAddress } from './common/mailInbox';
 
 // One call hydrates the whole app: the traveler, the trips they own or are a
 // companion on, and the active trip's full state (board, messages, pending
@@ -47,6 +48,10 @@ export async function getBootstrap() {
   const roster = active ? await buildRoster(active.id, userId) : [];
   const freshUser = user ? await Users.get(userId) : null;
 
+  // Best-effort — a mail.tm hiccup shouldn't fail the whole bootstrap; the
+  // import-by-email hint just won't show for this load.
+  const importEmailAddress = await currentInboxAddress();
+
   return {
     authenticated: true as const,
     user: freshUser || user || null,
@@ -57,5 +62,7 @@ export async function getBootstrap() {
     pendingActions: bundle?.pendingActions ?? [],
     activeCall: bundle?.activeCall ?? null,
     roster,
+    importEmailAddress,
+    expenses: bundle?.expenses ?? [],
   };
 }

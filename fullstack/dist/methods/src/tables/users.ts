@@ -48,6 +48,10 @@ export interface User {
   languages?: string[];
   photoUrl?: string; // data URI of a self-uploaded photo; absent = use the gender default
   profileComplete?: boolean;
+  // Opt-in, default off — "The Trip Recap": a generated shareable summary
+  // posted to the trip's chat a day or two after it wraps up. Never a
+  // surprise, so it's gated on this rather than sent automatically.
+  recapOptIn?: boolean;
 }
 
 export const Users = db.defineTable<User>('users');

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { api } from './api';
 import { voice, type VoiceState } from './voice';
 import { detectLocation } from './geo';
+import { resizeImageFile } from './imageResize';
 import type {
   Trip,
   TripNode,
@@ -10,6 +11,8 @@ import type {
   Message,
   PendingAction,
   CallTurn,
+  CallSession,
+  TripExpense,
   StreamEvent,
   NodeKind,
   RosterMember,
@@ -20,6 +23,7 @@ import type {
   ConversationParticipant,
   ConversationMessage,
   FriendRequestSummary,
+  FriendSummary,
 } from './types';
 
 // A member is "present" if we heard from them within this window. The grace
@@ -27,6 +31,17 @@ import type {
 export const PRESENCE_WINDOW_MS = 10_000;
 export function isPresent(m: RosterMember): boolean {
   return !!m.lastSeenAt && Date.now() - m.lastSeenAt < PRESENCE_WINDOW_MS;
+}
+
+// Plain data-URL read, no resize — used for PDFs (resizeImageFile only
+// handles images, via canvas re-encoding).
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('Could not read that file.'));
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(file);
+  });
 }
 
 let toastSeq = 0;
@@ -40,6 +55,9 @@ export interface Toast {
 interface CallState {
   open: boolean;
   sessionId: string | null;
+  // Who this call is with — a venue on the traveler's behalf (existing
+  // disruption flow), or Waypoint calling the traveler themselves.
+  kind: 'to_venue' | 'to_traveler';
   target: string;
   nodeId: string | null;
   status: 'dialing' | 'connected' | 'in_progress' | 'ended' | 'failed';
@@ -51,6 +69,7 @@ interface CallState {
 const emptyCall: CallState = {
   open: false,
   sessionId: null,
+  kind: 'to_venue',
   target: '',
   nodeId: null,
   status: 'dialing',
@@ -58,6 +77,27 @@ const emptyCall: CallState = {
   transcript: [],
   outcome: null,
 };
+
+// A freshly-placed "Waypoint Calls You" session, seen via getBootstrap/getTrip
+// (initial load) or syncTrip (the ~4s heartbeat while a trip is open) — either
+// way, opens the incoming-call UI instead of being applied as normal trip data.
+function isRingingTravelerCall(call: CallSession | null | undefined): call is CallSession {
+  return !!call && call.kind === 'to_traveler' && call.status === 'dialing';
+}
+
+function ringingCallState(call: CallSession): CallState {
+  return {
+    open: true,
+    sessionId: call.id,
+    kind: 'to_traveler',
+    target: call.target,
+    nodeId: call.nodeId,
+    status: 'dialing',
+    subStatus: call.subStatus || 'Ringing',
+    transcript: [],
+    outcome: null,
+  };
+}
 
 interface StoreState {
   // data
@@ -77,6 +117,9 @@ interface StoreState {
   peopleOpen: boolean;
   inviteBusy: boolean;
   lastInvite: InviteResult | null;
+  // split the bill
+  expenses: TripExpense[];
+  splitOpen: boolean;
   // conversation runtime
   thinking: boolean;
   streamingReply: string | null;
@@ -91,6 +134,16 @@ interface StoreState {
   // voice + ui
   voiceState: VoiceState;
   micActive: boolean;
+  // True only while an ambient, pre-trip mascot conversation is in progress
+  // (tapped the mascot with no trip open yet) — routes voice.onQuery to
+  // askMascotTurn instead of the normal in-trip send() pipeline.
+  mascotMode: boolean;
+  askMascotTurn: (text: string) => Promise<string>;
+  // The mascot's tap handler: stops an in-progress turn on a second tap
+  // (some travelers don't want it to keep talking), otherwise starts
+  // listening — in ambient mode (no trip open yet) rather than redirecting
+  // into trip planning immediately.
+  tapMascot: () => void;
   theme: 'light' | 'dark';
   toasts: Toast[];
   // actions
@@ -116,10 +169,24 @@ interface StoreState {
   // Returns the agent's spoken reply so the Vocal Bridge query channel can
   // voice it; the browser-speech path ignores the return value.
   send: (text: string, source: 'voice' | 'chat') => Promise<string>;
+  // The app's shared disposable-inbox address (mail.tm) — shown near the
+  // import button as "or forward a confirmation to <address>".
+  importEmailAddress: string | null;
+  // Set when an import (upload or forwarded email) needs one more answer
+  // before it can create a node — a missing field, or which trip it's for.
+  pendingImportId: string | null;
+  pendingImportQuestion: string | null;
+  importDocument: (file: File) => Promise<void>;
+  resolveImportAnswer: (answer: string) => Promise<void>;
   approve: (actionId: string) => Promise<void>;
   decline: (actionId: string) => Promise<void>;
   triggerDisruption: () => Promise<void>;
   dismissCall: () => void;
+  // "Waypoint Calls You" — answering/declining an incoming (not traveler-
+  // approved) call, as opposed to approve()/decline() which resolve a
+  // pending confirm-gate action.
+  answerCall: () => Promise<void>;
+  declineCall: () => Promise<void>;
   pushToast: (kind: Toast['kind'], text: string) => void;
   dismissToast: (id: number) => void;
   applyStreamEvent: (e: StreamEvent) => void;
@@ -129,6 +196,10 @@ interface StoreState {
   closePeople: () => void;
   invite: (email: string) => Promise<InviteResult | null>;
   clearLastInvite: () => void;
+  // split the bill
+  openSplit: () => void;
+  closeSplit: () => void;
+  markPaid: (expenseId: string) => Promise<void>;
   setMemberApproval: (collaboratorId: string, canApprove: boolean) => Promise<void>;
   removeMember: (collaboratorId: string) => Promise<void>;
   claimByToken: (token: string) => Promise<boolean>;
@@ -144,6 +215,12 @@ interface StoreState {
   loadFriendRequests: () => Promise<void>;
   sendFriendRequest: (toUserId: string) => Promise<void>;
   respondToFriendRequest: (requestId: string, accept: boolean) => Promise<void>;
+  // Every friend, location-independent — backs the group-chat picker.
+  friends: FriendSummary[];
+  loadFriends: () => Promise<void>;
+  groupPickerOpen: boolean;
+  openGroupPicker: () => void;
+  closeGroupPicker: () => void;
   conversations: ConversationSummary[];
   activeConversation: { id: string; type: 'direct' | 'group'; title: string | null; participants: ConversationParticipant[] } | null;
   conversationMessages: ConversationMessage[];
@@ -191,11 +268,15 @@ export const useStore = create<StoreState>((set, get) => ({
   pendingActions: [],
   roster: [],
   peopleOpen: false,
+  expenses: [],
+  splitOpen: false,
   nearbyScope: 'city',
   nearbyUsers: [],
   nearbyLoading: false,
   nearbyHasLocation: false,
   friendRequests: [],
+  friends: [],
+  groupPickerOpen: false,
   conversations: [],
   activeConversation: null,
   conversationMessages: [],
@@ -215,8 +296,12 @@ export const useStore = create<StoreState>((set, get) => ({
   call: emptyCall,
   voiceState: 'idle',
   micActive: false,
+  mascotMode: false,
   theme: 'light',
   toasts: [],
+  importEmailAddress: null,
+  pendingImportId: null,
+  pendingImportQuestion: null,
 
   bootstrap: async () => {
     try {
@@ -238,7 +323,21 @@ export const useStore = create<StoreState>((set, get) => ({
         messages: b.messages ?? [],
         pendingActions: (b.pendingActions ?? []).filter((a) => a.status === 'pending'),
         roster: b.roster ?? [],
+        importEmailAddress: b.importEmailAddress ?? null,
+        expenses: b.expenses ?? [],
+        // Reloading the page (or reopening the app) must drop the traveler
+        // back into the conversation they left, not the home/trip-list
+        // screen — getBootstrap already picks the most recently updated trip
+        // as activeTripId specifically so this can resume it. Without this,
+        // all the right data loads into the store but the view itself never
+        // leaves its default 'home', so it LOOKS like nothing resumed even
+        // though a reopen of the same trip would show everything intact.
+        ...(b.activeTripId ? { view: 'planning' as const } : {}),
       });
+      // A "Waypoint Calls You" session could already be ringing on load (the
+      // call was placed while this tab was closed) — surface it immediately
+      // rather than waiting for the next sync poll.
+      if (isRingingTravelerCall(b.activeCall)) set({ call: ringingCallState(b.activeCall) });
       // Fire-and-forget: refresh "where I am" so people-nearby stays current
       // for anyone who's actually traveled since last time — but only when
       // the saved location is stale enough that it's worth re-asking. A
@@ -299,7 +398,7 @@ export const useStore = create<StoreState>((set, get) => ({
   // the voice agent what's in focus so the next spoken turn can reference it.
   selectNode: (id) => {
     if (id) voice.sendBoardSelection(id);
-    set({ selectedNodeId: id, peopleOpen: id ? false : get().peopleOpen });
+    set({ selectedNodeId: id, peopleOpen: id ? false : get().peopleOpen, splitOpen: id ? false : get().splitOpen });
   },
 
   newTrip: () =>
@@ -310,6 +409,8 @@ export const useStore = create<StoreState>((set, get) => ({
       pendingActions: [],
       roster: [],
       peopleOpen: false,
+      expenses: [],
+      splitOpen: false,
       selectedNodeId: null,
       ghosts: [],
       streamingReply: null,
@@ -319,7 +420,11 @@ export const useStore = create<StoreState>((set, get) => ({
 
   switchTrip: async (id) => {
     if (get().activeTripId === id) return;
-    set({ activeTripId: id, selectedNodeId: null, ghosts: [], streamingReply: null, status: '', peopleOpen: false, roster: [] });
+    // Leaving whatever voice turn was in progress on the trip we're switching
+    // away from — never leave it listening/speaking against a screen that's
+    // no longer showing that conversation.
+    void voice.stopAll();
+    set({ activeTripId: id, selectedNodeId: null, ghosts: [], streamingReply: null, status: '', peopleOpen: false, splitOpen: false, roster: [] });
     try {
       const b = await api.getTrip({ tripId: id });
       set({
@@ -327,14 +432,22 @@ export const useStore = create<StoreState>((set, get) => ({
         messages: b.messages,
         pendingActions: (b.pendingActions ?? []).filter((a) => a.status === 'pending'),
         roster: b.roster ?? [],
+        expenses: b.expenses ?? [],
       });
+      if (isRingingTravelerCall(b.activeCall)) set({ call: ringingCallState(b.activeCall) });
     } catch (err) {
       console.error('switchTrip failed', err);
       get().pushToast('danger', 'Could not open that trip.');
     }
   },
 
-  goHome: () => set({ view: 'home' }),
+  // Navigating back must stop whatever voice turn was in progress — otherwise
+  // the agent keeps listening/talking against a trip that's no longer on
+  // screen (the exact "it keeps talking after I go back" bug).
+  goHome: () => {
+    void voice.stopAll();
+    set({ view: 'home', mascotMode: false });
+  },
   openProfile: () => set({ view: 'profile' }),
 
   openPlanning: async (id) => {
@@ -345,6 +458,42 @@ export const useStore = create<StoreState>((set, get) => ({
   openNewPlanning: () => {
     get().newTrip();
     set({ view: 'planning' });
+  },
+
+  // The mascot's ambient, pre-trip turn: ask the backend whether this is real
+  // trip intent or just a general question. A "chat" reply is just spoken —
+  // the conversation continues with no navigation. A "plan_trip" reply hands
+  // off into the exact same trip-planning pipeline the in-trip orb uses,
+  // seeded with what the traveler actually said, so nothing is lost.
+  askMascotTurn: async (text) => {
+    try {
+      const res = await api.askMascot({ text });
+      if (res.intent === 'plan_trip') {
+        set({ mascotMode: false });
+        get().openNewPlanning();
+        const seed = res.seedText || text;
+        const reply = await get().send(seed, 'voice');
+        return reply || res.reply;
+      }
+      return res.reply;
+    } catch (err) {
+      console.error('askMascotTurn failed', err);
+      return "Sorry, I hit a snag there.";
+    }
+  },
+
+  tapMascot: () => {
+    const { voiceState, activeTripId } = get();
+    if (voiceState === 'listening' || voiceState === 'speaking' || voiceState === 'connecting') {
+      void voice.stopAll();
+      set({ mascotMode: false });
+      return;
+    }
+    // Only ambient (no redirect) when there's no trip open yet — tapping the
+    // persistent mascot while already deep in planning just resumes that
+    // trip's conversation, same as before, instead of wiping it.
+    if (!activeTripId) set({ mascotMode: true });
+    get().toggleMic();
   },
 
   send: async (text, source) => {
@@ -423,6 +572,92 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  importDocument: async (file) => {
+    if (get().thinking) return;
+    const { activeTripId } = get();
+    const isImage = file.type.startsWith('image/');
+    set({ thinking: true, status: 'Reading your document', pendingImportId: null, pendingImportQuestion: null });
+    const importing: Message = {
+      id: `tmp-${Date.now()}`,
+      tripId: activeTripId || 'new',
+      role: 'user',
+      text: `Uploaded ${file.name}`,
+      source: 'system',
+      status: 'complete',
+    };
+    set((s) => ({ messages: [...s.messages, importing] }));
+
+    try {
+      const fileDataUrl = isImage ? await resizeImageFile(file, 2000, 0.9) : await readFileAsDataUrl(file);
+      const res = await api.importDocument(
+        { tripId: activeTripId || undefined, fileDataUrl, fileName: file.name },
+        { stream: true, onStreamData: (e) => get().applyStreamEvent(e as StreamEvent), onStreamError: (err) => console.error(err) },
+      );
+      const agentMsg: Message = {
+        id: `agent-${Date.now()}`,
+        tripId: res.tripId || activeTripId || 'new',
+        role: 'agent',
+        text: res.reply,
+        source: 'chat',
+        status: 'complete',
+      };
+      set((s) => ({
+        messages: [...s.messages, agentMsg],
+        pendingImportId: res.needsClarification ? res.importId ?? null : null,
+        pendingImportQuestion: res.needsClarification ? res.reply : null,
+      }));
+      if (res.tripId && res.tripId !== get().activeTripId) set({ activeTripId: res.tripId });
+      get().refreshTripList(get().trip);
+    } catch (err: any) {
+      console.error('importDocument failed', err);
+      get().pushToast('danger', String(err?.message || "Couldn't read that file."));
+    } finally {
+      set({ thinking: false, status: '' });
+    }
+  },
+
+  resolveImportAnswer: async (answer) => {
+    const { pendingImportId } = get();
+    if (!pendingImportId || get().thinking) return;
+    const trimmed = answer.trim();
+    if (!trimmed) return;
+    const optimistic: Message = {
+      id: `tmp-${Date.now()}`,
+      tripId: get().activeTripId || 'new',
+      role: 'user',
+      text: trimmed,
+      source: 'chat',
+      status: 'complete',
+    };
+    set((s) => ({ messages: [...s.messages, optimistic], thinking: true }));
+    try {
+      const res = await api.resolveImport(
+        { importId: pendingImportId, answer: trimmed },
+        { stream: true, onStreamData: (e) => get().applyStreamEvent(e as StreamEvent) },
+      );
+      const agentMsg: Message = {
+        id: `agent-${Date.now()}`,
+        tripId: res.tripId || get().activeTripId || 'new',
+        role: 'agent',
+        text: res.reply,
+        source: 'chat',
+        status: 'complete',
+      };
+      set((s) => ({
+        messages: [...s.messages, agentMsg],
+        pendingImportId: res.needsClarification ? res.importId ?? null : null,
+        pendingImportQuestion: res.needsClarification ? res.reply : null,
+      }));
+      if (res.tripId && res.tripId !== get().activeTripId) set({ activeTripId: res.tripId });
+      get().refreshTripList(get().trip);
+    } catch (err) {
+      console.error('resolveImportAnswer failed', err);
+      get().pushToast('danger', 'That did not go through — mind trying again?');
+    } finally {
+      set({ thinking: false });
+    }
+  },
+
   approve: async (actionId) => {
     const action = get().pendingActions.find((a) => a.id === actionId);
     if (!action) return;
@@ -436,6 +671,7 @@ export const useStore = create<StoreState>((set, get) => ({
           call: {
             open: true,
             sessionId,
+            kind: 'to_venue',
             target: action.payload?.target || 'the airline',
             nodeId: action.nodeId,
             status: 'dialing',
@@ -451,6 +687,7 @@ export const useStore = create<StoreState>((set, get) => ({
       } else {
         const res = await api.approveAction({ actionId });
         if (res.trip) set({ trip: res.trip });
+        if (res.expenses) set({ expenses: res.expenses });
         get().refreshTripList(res.trip);
         get().pushToast('success', bookedToast(action));
       }
@@ -499,6 +736,34 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   dismissCall: () => set({ call: { ...emptyCall } }),
+
+  answerCall: async () => {
+    const { call } = get();
+    if (!call.open || call.kind !== 'to_traveler' || !call.sessionId) return;
+    set((s) => ({ call: { ...s.call, status: 'connected', subStatus: 'Connecting' } }));
+    try {
+      await api.answerTravelerCall(
+        { callSessionId: call.sessionId },
+        { stream: true, onStreamData: (e) => get().applyStreamEvent(e as StreamEvent), onStreamError: (err) => console.error(err) },
+      );
+    } catch (err) {
+      console.error('answerCall failed', err);
+      get().pushToast('danger', 'That call dropped — the update is on its way to your messages instead.');
+      get().dismissCall();
+    }
+  },
+
+  declineCall: async () => {
+    const { call } = get();
+    if (!call.open || call.kind !== 'to_traveler' || !call.sessionId) return;
+    const sessionId = call.sessionId;
+    get().dismissCall();
+    try {
+      await api.declineTravelerCall({ callSessionId: sessionId });
+    } catch (err) {
+      console.error('declineCall failed', err);
+    }
+  },
 
   pushToast: (kind, text) => {
     const id = ++toastSeq;
@@ -553,6 +818,10 @@ export const useStore = create<StoreState>((set, get) => ({
         break;
       case 'call_turn':
         set((s) => ({ call: { ...s.call, transcript: [...s.call.transcript, e.turn], subStatus: e.subStatus, status: 'in_progress' } }));
+        // A traveler call is Waypoint speaking to the traveler directly, not a
+        // transcript of two other parties — say it aloud. The airline call's
+        // transcript has never been spoken and stays that way.
+        if (get().call.kind === 'to_traveler') voice.speak(e.turn.text);
         break;
       case 'call_status':
         set((s) => ({ call: { ...s.call, status: e.status, subStatus: e.subStatus, outcome: e.outcome ?? s.call.outcome } }));
@@ -576,8 +845,22 @@ export const useStore = create<StoreState>((set, get) => ({
 
   // ---- Shared trips ----
 
-  openPeople: () => set({ peopleOpen: true, selectedNodeId: null }),
+  openPeople: () => set({ peopleOpen: true, splitOpen: false, selectedNodeId: null }),
   closePeople: () => set({ peopleOpen: false, lastInvite: null }),
+
+  openSplit: () => set({ splitOpen: true, peopleOpen: false, selectedNodeId: null }),
+  closeSplit: () => set({ splitOpen: false }),
+
+  markPaid: async (expenseId) => {
+    try {
+      const res = await api.markExpensePaid({ expenseId });
+      set((s) => ({ expenses: s.expenses.map((e) => (e.id === expenseId ? res.expense : e)) }));
+      get().pushToast('success', "Marked as paid — you're settled up.");
+    } catch (err: any) {
+      console.error('markPaid failed', err);
+      get().pushToast('danger', err?.message || 'Could not mark that as paid.');
+    }
+  },
 
   invite: async (email) => {
     const { activeTripId } = get();
@@ -664,14 +947,22 @@ export const useStore = create<StoreState>((set, get) => ({
       });
       // Roster (presence) always refreshes.
       set({ roster: res.roster });
+      const s = get();
+      // A "Waypoint Calls You" session just started ringing — this IS the
+      // mechanism that reaches an open tab (there's no push channel), so it
+      // takes priority over the normal bundle-apply below for this tick.
+      if (res.changed && !s.call.open && isRingingTravelerCall(res.activeCall)) {
+        set({ call: ringingCallState(res.activeCall) });
+        return;
+      }
       // Only apply a fresh bundle when we're not mid-turn or in a call, to avoid
       // clobbering optimistic/streaming state. Our own turns update state directly.
-      const s = get();
       if (res.changed && !s.thinking && !s.call.open && res.trip.version > (s.trip?.version ?? 0)) {
         set({
           trip: res.trip,
           messages: res.messages,
           pendingActions: (res.pendingActions ?? []).filter((a) => a.status === 'pending'),
+          expenses: res.expenses ?? [],
         });
         get().refreshTripList(res.trip);
       }
@@ -739,10 +1030,25 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  loadFriends: async () => {
+    try {
+      const res = await api.listFriends();
+      set({ friends: res.friends });
+    } catch (err) {
+      console.error('loadFriends failed', err);
+    }
+  },
+
+  openGroupPicker: () => set({ groupPickerOpen: true }),
+  closeGroupPicker: () => set({ groupPickerOpen: false }),
+
   toggleConversationsPanel: () => {
     const opening = !get().conversationsPanelOpen;
     set({ conversationsPanelOpen: opening });
-    if (opening) get().loadConversations();
+    if (opening) {
+      get().loadConversations();
+      get().loadFriends();
+    }
   },
 
   loadConversations: async () => {
@@ -899,7 +1205,6 @@ function bookedToast(action: PendingAction): string {
 
 // Wire the voice engine's callbacks into the store once.
 voice.onStateChange = (s) => useStore.getState().setVoiceState(s);
-voice.onResult = (text) => useStore.getState().send(text, 'voice');
 // Vocal Bridge hands each spoken query to the same converse pipeline chat
 // uses; the returned reply is voiced by the agent (docs/03 §2.5). Vocal Bridge
 // speaks the return value verbatim, so we must never hand it an empty string —
@@ -917,18 +1222,85 @@ voice.onResult = (text) => useStore.getState().send(text, 'voice');
 const VOICE_DEDUP_WINDOW_MS = 4000;
 let lastVoiceQuery: { text: string; at: number; replyPromise: Promise<string> } | null = null;
 
+// A real traveler never describes themselves in the third person to a voice
+// assistant ("User wants to plan a trip... They are starting a conversation
+// after greeting."). Text shaped like that is the query-formulation layer
+// talking about the turn instead of transcribing it — most often produced
+// when the mic picks up silence, noise, or (see the echoCancellation fix in
+// voice.ts) the agent's own TTS bleeding back in, and the pipeline still has
+// to return *some* text. Catching it here stops it from being treated as a
+// genuine spoken request (pushed into the trip, driving real board changes)
+// even if the audio-side fix above doesn't fully eliminate the trigger.
+const PHANTOM_QUERY_RE =
+  /\b(the\s+)?(user|traveler)\s+(wants|want|is|are|just)\b|\bthey('re| are)\s+(starting|beginning)\s+a\s+conversation\b/i;
+
 voice.onQuery = async (text) => {
   const q = text.trim();
   if (!q) return "Sorry, I didn't catch that — where would you like to go?";
+  if (PHANTOM_QUERY_RE.test(q)) {
+    console.warn('[voice] dropped a likely phantom (non-speech) query:', q);
+    return "I'm here whenever you're ready — go ahead.";
+  }
   if (lastVoiceQuery && lastVoiceQuery.text === q && Date.now() - lastVoiceQuery.at < VOICE_DEDUP_WINDOW_MS) {
     return lastVoiceQuery.replyPromise;
+  }
+  // Any turn with no trip open yet routes through the intent-checking (and,
+  // per common/voiceConfirm.ts, confirmation-gated) askMascotTurn instead of
+  // going straight into planning — not just when mascotMode is set. Gating
+  // on mascotMode alone left a real gap: tapping "New Trip" sets
+  // activeTripId to null without setting mascotMode, so the very next voice
+  // turn (fabricated or not) fell straight into send()'s no-tripId path,
+  // which creates a trip immediately with no confirmation at all — exactly
+  // how "Trip to Paris" got created from a single fabricated turn nobody
+  // confirmed.
+  const noTripOpen = !useStore.getState().activeTripId;
+  const replyPromise = useStore.getState().mascotMode || noTripOpen
+    ? useStore.getState().askMascotTurn(q)
+    : useStore
+        .getState()
+        .send(q, 'voice')
+        .then((reply) => reply || 'One moment — I’m still working on that.');
+  lastVoiceQuery = { text: q, at: Date.now(), replyPromise };
+  return replyPromise;
+};
+
+// Browser-native SpeechRecognition path (voice.ts's FORCE_BROWSER_SPEECH),
+// now the primary voice path. Unlike onQuery above, the SDK/browser API gives
+// this callback no return value to auto-speak — it's fire-and-forget — so it
+// must mirror onQuery's mascotMode routing itself, and (the bug this
+// replaces) any ambient utterance with no trip open would otherwise fall
+// straight into send()'s no-tripId path and silently create a trip from a
+// casual remark.
+voice.onResult = async (text) => {
+  const q = text.trim();
+  if (!q) return;
+  if (PHANTOM_QUERY_RE.test(q)) {
+    console.warn('[voice] dropped a likely phantom (non-speech) result:', q);
+    return;
+  }
+  if (lastVoiceQuery && lastVoiceQuery.text === q && Date.now() - lastVoiceQuery.at < VOICE_DEDUP_WINDOW_MS) return;
+  // Same gap as onQuery above: gate on "no trip open" too, not just
+  // mascotMode, so a voice turn right after tapping "New Trip" (activeTripId
+  // null, mascotMode still false) also goes through the confirmation-gated
+  // askMascotTurn instead of straight into send()'s no-tripId auto-create.
+  if (useStore.getState().mascotMode || !useStore.getState().activeTripId) {
+    const replyPromise = useStore.getState().askMascotTurn(q);
+    lastVoiceQuery = { text: q, at: Date.now(), replyPromise };
+    const reply = await replyPromise;
+    // askMascotTurn's plan_trip branch (if it fired) calls openNewPlanning(),
+    // which sets a real activeTripId, and its own nested send() call already
+    // spoke the reply — speaking again here would audibly cut off and
+    // restart it. Only speak when we're still tripless afterward, meaning
+    // the pure ambient "chat" branch ran and nothing else has spoken yet.
+    if (!useStore.getState().activeTripId) voice.speak(reply);
+    return;
   }
   const replyPromise = useStore
     .getState()
     .send(q, 'voice')
     .then((reply) => reply || 'One moment — I’m still working on that.');
   lastVoiceQuery = { text: q, at: Date.now(), replyPromise };
-  return replyPromise;
+  await replyPromise; // send() already speaks its own reply for source 'voice'
 };
 
 export function selectNodeById(nodes: TripNode[], id: string | null): TripNode | null {
